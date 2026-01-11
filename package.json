@@ -9,7 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ffmpeg/core-mt": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@google/generative-ai": "^0.24.1",
+    "@next-auth/prisma-adapter": "^1.0.7",
+    "@portone/browser-sdk": "^0.1.2",
+    "@prisma/client": "5.22.0",
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
+    "@supabase/supabase-js": "^2.90.1",
+    "lucide-react": "^0.562.0",
     "next": "16.1.1",
+    "next-auth": "^4.24.13",
+    "prisma": "5.22.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
