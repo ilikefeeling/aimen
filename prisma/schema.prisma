@@ -1,0 +1,91 @@
+// 1. 설정: 데이터베이스 연결 및 클라이언트 생성
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// 2. 사용자 모델: 카카오 로그인 및 결제 상태 관리
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  image         String?   // 프로필 이미지
+  kakaoId       String?   @unique // 카카오 고유 식별자
+  
+  // 비즈니스 로직 관련
+  role          Role      @default(USER)     // USER, ADMIN(사용자 승인 권한)
+  status        Status    @default(PENDING)  // PENDING(승인대기), ACTIVE(승인완료)
+  plan          Plan      @default(FREE)     // FREE, PRO(유료결제자)
+  
+  // 관계 설정
+  sermons       Sermon[]  // 사용자가 업로드한 설교 목록
+  payments      Payment[] // 결제 이력
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// 3. 설교 콘텐츠 모델: AI 분석 및 숏폼 데이터 저장
+model Sermon {
+  id            String      @id @default(cuid())
+  title         String      // 설교 제목
+  videoUrl      String      // 원본 영상 경로
+  churchName    String?     // 교회 이름 (워터마크용)
+  
+  // AI 분석 결과 (JSON 형태로 저장하여 유연성 확보)
+  analysisData  Json?       // Gemini가 추출한 타임스탬프, 캡션, 요약 등
+  
+  // 관계 설정
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  highlights    Highlight[] // 잘라낸 숏폼 영상들
+  
+  createdAt     DateTime    @default(now())
+}
+
+// 4. 하이라이트 모델: 편집된 숏폼 정보
+model Highlight {
+  id            String   @id @default(cuid())
+  sermonId      String
+  sermon        Sermon   @relation(fields: [sermonId], references: [id])
+  
+  startTime     String   // 00:01:30
+  endTime       String   // 00:02:30
+  videoUrl      String   // 편집된 영상 파일 경로
+  caption       String?  @db.Text // SNS 게시용 문구
+  
+  createdAt     DateTime @default(now())
+}
+
+// 5. 결제 모델: 수익화 확인용
+model Payment {
+  id            String   @id @default(cuid())
+  amount        Int
+  status        String   // COMPLETED, CANCELLED
+  paymentKey    String   @unique // PG사 결제 키
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  
+  createdAt     DateTime @default(now())
+}
+
+// 열거형(Enum) 정의
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Status {
+  PENDING
+  ACTIVE
+}
+
+enum Plan {
+  FREE
+  PRO
+}

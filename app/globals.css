@@ -1,26 +1,143 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --navy: #0A192F;
+  --navy-darker: #050D1A;
+  --navy-light: #112240;
+  --navy-lighter: #1A2F4F;
+  --gold: #D4AF37;
+  --gold-light: #E5C878;
+  --gold-dark: #B8941F;
+  --yellow-bright: #FDB913;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--navy);
+  color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--navy-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gold);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-light);
+}
+
+/* Gradient utilities */
+.bg-gradient-navy {
+  background: linear-gradient(180deg, var(--navy) 0%, var(--navy-light) 100%);
+}
+
+.bg-gradient-gold {
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+}
+
+/* Animation */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease-out;
+}
+
+/* Glow pulse animation for icons */
+@keyframes glow-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 40px rgba(212, 175, 55, 0.4),
+      0 0 60px rgba(212, 175, 55, 0.2);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Subtle pulse for CTA buttons */
+@keyframes pulse-subtle {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Bounce animation for upload icon */
+@keyframes bounce-slow {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 2s ease-in-out infinite;
+}
+
+/* Text wrap utility */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Backdrop blur utility */
+  .backdrop-blur-glass {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* Deep shadow for cards */
+  .shadow-card-deep {
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
+      0 8px 16px rgba(0, 0, 0, 0.3);
+  }
+
+  .shadow-card-hover {
+    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6),
+      0 10px 20px rgba(212, 175, 55, 0.1);
+  }
 }
