@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Cinzel } from "next/font/google";
 import "./globals.css";
-import { SessionProvider } from "@/components/SessionProvider";
+import { ClientWrapper } from "./client-wrapper";
 
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-inter",
+});
+
+const cinzel = Cinzel({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  variable: "--font-cinzel",
 });
 
 export const metadata: Metadata = {
@@ -21,12 +27,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
-      <body className={`${inter.variable} antialiased`}>
-        <SessionProvider>
+    <html lang="ko" suppressHydrationWarning>
+      <body className={`${inter.variable} ${cinzel.variable} antialiased`}>
+        <ClientWrapper>
           {children}
-        </SessionProvider>
+        </ClientWrapper>
       </body>
     </html>
   );
 }
+
+

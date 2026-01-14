@@ -1,23 +1,35 @@
 'use client';
 
 import { signIn, useSession } from 'next-auth/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Upload, Zap, DollarSign, Sparkles, Video, Grid3x3, Check, Settings } from 'lucide-react';
 
 export default function HomePage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Hydration 오류(removeChild) 방지를 위한 마운트 체크
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
-      // TODO: Navigate to dashboard or show upload success
+      router.push('/dashboard/upload');
     }
   };
+
+  // 마운트 전에는 빈 레이아웃(또는 최소한의 서버 렌더링 결과) 반환
+  if (!mounted) {
+    return <div className="min-h-screen bg-navy-darker" />;
+  }
+
   return (
     <div className="min-h-screen bg-navy-darker">
       {/* Header */}
@@ -32,7 +44,7 @@ export default function HomePage() {
             </div>
             <div className="flex items-center gap-3">
               {/* Admin Dashboard Button */}
-              {session?.user?.role === 'admin' && (
+              {session?.user && (session.user as any).role === 'ADMIN' && (
                 <button
                   onClick={() => router.push('/admin')}
                   className="bg-gold/20 hover:bg-gold/30 text-gold border border-gold/50 px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2"
@@ -41,16 +53,26 @@ export default function HomePage() {
                   관리자
                 </button>
               )}
-              <button
-                onClick={() => signIn('kakao')}
-                className="bg-yellow-bright hover:bg-gold-light text-navy px-6 py-2 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
-              >
-                체험
-              </button>
+              {status === 'authenticated' ? (
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="bg-gold hover:bg-gold-light text-navy px-6 py-2 rounded-lg font-semibold transition-all shadow-md"
+                >
+                  대시보드
+                </button>
+              ) : (
+                <button
+                  onClick={() => signIn('kakao')}
+                  className="bg-yellow-bright hover:bg-gold-light text-navy px-6 py-2 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
+                >
+                  체험
+                </button>
+              )}
             </div>
           </div>
         </div>
       </nav>
+      {/* ... rest of the file ... */}
 
       {/* Hero Section - Card Style */}
       <section className="relative overflow-hidden py-6">

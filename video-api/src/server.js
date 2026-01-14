@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const uploadRoutes = require('./routes/upload');
 const jobsRoutes = require('./routes/jobs');
+const clipsRoutes = require('./routes/clips');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,6 +33,7 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/upload', uploadRoutes);
 app.use('/api/jobs', jobsRoutes);
+app.use('/api/clips', clipsRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

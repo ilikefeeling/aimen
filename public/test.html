@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,19 +13,26 @@
             padding: 20px;
             background: #f5f5f5;
         }
+
         .container {
             background: white;
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        h1 { color: #333; }
-        input, button {
+
+        h1 {
+            color: #333;
+        }
+
+        input,
+        button {
             width: 100%;
             padding: 10px;
             margin: 10px 0;
             box-sizing: border-box;
         }
+
         button {
             background: #007bff;
             color: white;
@@ -33,11 +41,16 @@
             cursor: pointer;
             font-size: 16px;
         }
-        button:hover { background: #0056b3; }
+
+        button:hover {
+            background: #0056b3;
+        }
+
         button:disabled {
             background: #ccc;
             cursor: not-allowed;
         }
+
         #progress {
             width: 100%;
             height: 30px;
@@ -46,18 +59,21 @@
             overflow: hidden;
             margin: 10px 0;
         }
+
         #progressBar {
             height: 100%;
             background: #28a745;
             width: 0%;
             transition: width 0.3s;
         }
+
         #status {
             margin: 10px 0;
             padding: 10px;
             background: #f8f9fa;
             border-radius: 5px;
         }
+
         .info {
             background: #e7f3ff;
             padding: 15px;
@@ -66,6 +82,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>🧪 Video Upload Test</h1>
@@ -81,7 +98,7 @@
 
         <label>영상 파일 선택:</label>
         <input type="file" id="videoFile" accept="video/*">
-        
+
         <label>제목:</label>
         <input type="text" id="title" placeholder="예: 테스트 영상 1">
 
@@ -130,8 +147,8 @@
                 formData.append('userId', 'test-user-123');
 
                 statusDiv.textContent = '📤 Uploading to Video API...';
-                
-                const uploadResponse = await fetch('http://localhost:3000/api/upload', {
+
+                const uploadResponse = await fetch('http://localhost:3001/api/upload', {
                     method: 'POST',
                     body: formData
                 });
@@ -141,7 +158,7 @@
                 }
 
                 const { jobId, videoId, url } = await uploadResponse.json();
-                
+
                 console.log('✅ Upload successful!');
                 console.log('  - Video ID:', videoId);
                 console.log('  - Job ID:', jobId);
@@ -152,7 +169,7 @@
 
                 // Poll job status
                 const pollInterval = setInterval(async () => {
-                    const statusResponse = await fetch(`http://localhost:3000/api/jobs/${jobId}`);
+                    const statusResponse = await fetch(`http://localhost:3001/api/jobs/${jobId}`);
                     const jobStatus = await statusResponse.json();
 
                     console.log(`📊 Progress: ${jobStatus.progress}% (${jobStatus.status})`);
@@ -180,4 +197,5 @@
         }
     </script>
 </body>
+
 </html>

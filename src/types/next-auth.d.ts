@@ -8,8 +8,8 @@ declare module 'next-auth' {
             name?: string;
             image?: string;
             role: string;
-            subscriptionStatus: string;
-            approvalStatus: string;
+            status: string;
+            plan: string;
         };
     }
 
@@ -19,7 +19,7 @@ declare module 'next-auth' {
         name?: string;
         image?: string;
         role: string;
-        subscriptionStatus: string;
-        approvalStatus: string;
+        status: string;
+        plan: string;
     }
 }
