@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+import { NextRequest, NextResponse } from 'next/server';
 import { analyzeSermonTranscript, analyzeSermonVideo, timeToSeconds } from '@/lib/gemini/client';
 import { prisma } from '@/lib/prisma';
 
