@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { Highlight } from '@/types';
 import { processHighlight, getVideoDuration, EditProgress } from '@/lib/ffmpeg/editor';
+import { secondsToTime } from '@/lib/gemini/client';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { ProgressBar } from './ui/ProgressBar';
@@ -40,8 +41,8 @@ export function VideoEditor({ videoFile, highlights }: VideoEditorProps) {
             const blob = await processHighlight(
                 videoFile,
                 {
-                    startTime: highlight.start_time,
-                    endTime: highlight.end_time,
+                    startTime: secondsToTime(highlight.startTime),
+                    endTime: secondsToTime(highlight.endTime),
                     watermarkText: 'aimen | 에이아이멘',
                     outputFormat: 'mp4',
                 },
@@ -123,8 +124,8 @@ export function VideoEditor({ videoFile, highlights }: VideoEditorProps) {
                             <Card
                                 key={index}
                                 className={`cursor-pointer transition-all border-gold/10 hover:border-gold/40 ${selectedHighlight === highlight
-                                        ? 'bg-navy-light ring-2 ring-gold border-transparent shadow-glow'
-                                        : 'bg-navy-light/40 hover:bg-navy-light/60'
+                                    ? 'bg-navy-light ring-2 ring-gold border-transparent shadow-glow'
+                                    : 'bg-navy-light/40 hover:bg-navy-light/60'
                                     }`}
                                 onClick={() => !isProcessing && handleProcessHighlight(highlight)}
                             >
@@ -140,7 +141,7 @@ export function VideoEditor({ videoFile, highlights }: VideoEditorProps) {
                                         </h4>
                                         <div className="flex items-center gap-2 text-xs text-gray-500 mb-2 font-bold">
                                             <Clock className="w-3 h-3" />
-                                            {highlight.start_time} - {highlight.end_time}
+                                            {secondsToTime(highlight.startTime)} - {secondsToTime(highlight.endTime)}
                                         </div>
                                         <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed italic">
                                             "{highlight.caption}"

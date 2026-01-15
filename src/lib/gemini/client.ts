@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Highlight } from '@/types';
+import { Highlight, AIHighlight } from '@/types';
 import { SERMON_HIGHLIGHT_PROMPT, buildAnalysisMessage, VIDEO_ANALYSIS_PROMPT } from './prompt';
 
 // Initialize Gemini AI
@@ -8,7 +8,7 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY || '');
 /**
  * Analyzes sermon transcript and extracts highlights using Gemini 1.5 Pro
  */
-export async function analyzeSermonTranscript(transcript: string): Promise<Highlight[]> {
+export async function analyzeSermonTranscript(transcript: string): Promise<AIHighlight[]> {
     try {
         // Use Gemini 1.5 Pro for best results
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
@@ -28,7 +28,7 @@ export async function analyzeSermonTranscript(transcript: string): Promise<Highl
             throw new Error('Invalid response format from Gemini API');
         }
 
-        return parsed.highlights as Highlight[];
+        return parsed.highlights as AIHighlight[];
     } catch (error) {
         console.error('Error analyzing sermon transcript:', error);
         throw new Error('Failed to analyze sermon. Please try again.');
@@ -39,7 +39,7 @@ export async function analyzeSermonTranscript(transcript: string): Promise<Highl
  * Analyzes sermon video file and extracts highlights using Gemini 1.5 Pro
  * This method uploads the video to Gemini and analyzes it directly
  */
-export async function analyzeSermonVideo(videoFile: File): Promise<Highlight[]> {
+export async function analyzeSermonVideo(videoFile: File): Promise<AIHighlight[]> {
     try {
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 
@@ -67,7 +67,7 @@ export async function analyzeSermonVideo(videoFile: File): Promise<Highlight[]> 
             throw new Error('Invalid response format from Gemini API');
         }
 
-        return parsed.highlights as Highlight[];
+        return parsed.highlights as AIHighlight[];
     } catch (error) {
         console.error('Error analyzing sermon video:', error);
         throw new Error('Failed to analyze video. Please try again.');
@@ -106,7 +106,7 @@ export function secondsToTime(totalSeconds: number): string {
 /**
  * Validates that all highlights are within valid time ranges
  */
-export function validateHighlights(highlights: Highlight[]): boolean {
+export function validateHighlights(highlights: AIHighlight[]): boolean {
     for (const highlight of highlights) {
         // Check time format
         if (!validateTimeFormat(highlight.start_time) || !validateTimeFormat(highlight.end_time)) {

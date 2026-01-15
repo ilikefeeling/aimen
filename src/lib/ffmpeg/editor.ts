@@ -68,7 +68,7 @@ export async function cutVideo(
 
         // Read output file
         const data = await ffmpeg.readFile(outputFileName);
-        const blob = new Blob([data], { type: `video/${options.outputFormat || 'mp4'}` });
+        const blob = new Blob([data as any], { type: `video/${options.outputFormat || 'mp4'}` });
 
         // Clean up
         await ffmpeg.deleteFile(inputFileName);
@@ -120,7 +120,7 @@ export async function addWatermark(
         onProgress?.({ stage: 'encoding', progress: 80, message: 'Finalizing video...' });
 
         const data = await ffmpeg.readFile(outputFileName);
-        const blob = new Blob([data], { type: `video/${options.outputFormat || 'mp4'}` });
+        const blob = new Blob([data as any], { type: `video/${options.outputFormat || 'mp4'}` });
 
         await ffmpeg.deleteFile(inputFileName);
         await ffmpeg.deleteFile(outputFileName);
@@ -191,7 +191,7 @@ export async function processHighlight(
         onProgress?.({ stage: 'encoding', progress: 90, message: 'Finalizing...' });
 
         const data = await ffmpeg.readFile(outputFileName);
-        const blob = new Blob([data], { type: `video/${options.outputFormat || 'mp4'}` });
+        const blob = new Blob([data as any], { type: `video/${options.outputFormat || 'mp4'}` });
 
         await ffmpeg.deleteFile(inputFileName);
         await ffmpeg.deleteFile(outputFileName);

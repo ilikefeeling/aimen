@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeSermonTranscript, analyzeSermonVideo } from '@/lib/gemini/client';
+import { analyzeSermonTranscript, analyzeSermonVideo, timeToSeconds } from '@/lib/gemini/client';
 import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -57,18 +57,19 @@ export async function POST(request: NextRequest) {
             }
 
             // Update sermon record with highlights and analysis results
+            const aiHighlights = highlights as any[];
             await prisma.sermon.update({
                 where: { id: sermon.id },
                 data: {
                     analysisData: {
                         status: 'COMPLETED',
-                        summary: highlights[0]?.summary || '',
+                        summary: aiHighlights[0]?.summary || '',
                     },
                     highlights: {
-                        create: highlights.map((h: any) => ({
+                        create: aiHighlights.map((h: any) => ({
                             title: h.title,
-                            startTime: 0, // Need to convert HH:MM:SS to Int if required, or change schema
-                            endTime: 60,
+                            startTime: typeof h.start_time === 'string' ? timeToSeconds(h.start_time) : 0,
+                            endTime: typeof h.end_time === 'string' ? timeToSeconds(h.end_time) : 60,
                             caption: h.caption,
                         }))
                     }

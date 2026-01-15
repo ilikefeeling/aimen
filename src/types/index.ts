@@ -9,6 +9,14 @@ export interface AnalysisData {
     failedAt?: string;
 }
 
+export interface AIHighlight {
+    start_time: string;
+    end_time: string;
+    title: string;
+    caption: string;
+    summary: string;
+}
+
 export interface Highlight {
     id: string;
     sermonId: string;
