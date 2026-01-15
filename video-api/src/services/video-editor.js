@@ -22,7 +22,31 @@ const PLATFORM_SPECS = {
         aspectRatio: '9:16',
         name: 'YouTube Shorts'
     },
+    youtube_shorts: {
+        width: 1080,
+        height: 1920,
+        aspectRatio: '9:16',
+        name: 'YouTube Shorts'
+    },
     instagram: {
+        width: 1080,
+        height: 1920,
+        aspectRatio: '9:16',
+        name: 'Instagram Reels'
+    },
+    instagram_reels: {
+        width: 1080,
+        height: 1920,
+        aspectRatio: '9:16',
+        name: 'Instagram Reels'
+    },
+    tiktok: {
+        width: 1080,
+        height: 1920,
+        aspectRatio: '9:16',
+        name: 'TikTok'
+    },
+    reels: {
         width: 1080,
         height: 1920,
         aspectRatio: '9:16',
@@ -47,40 +71,49 @@ const PLATFORM_SPECS = {
  */
 async function extractClip(inputVideoPath, outputPath, startTime, endTime, platform = 'youtube') {
     return new Promise((resolve, reject) => {
-        const spec = PLATFORM_SPECS[platform];
+        const spec = PLATFORM_SPECS[platform] || PLATFORM_SPECS['youtube'];
         const duration = endTime - startTime;
 
-        console.log(`📹 Extracting clip for ${spec.name}`);
-        console.log(`   Start: ${startTime}s, Duration: ${duration}s`);
-        console.log(`   Resolution: ${spec.width}x${spec.height}`);
+        console.log(`📹 Extracting clip for ${spec.name} (${startTime}s to ${endTime}s)`);
 
+        // Simplified filter for better compatibility
+        const filter = spec.aspectRatio === '9:16'
+            ? "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
+            : "scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080";
+
+        // Place -ss BEFORE -i for fast seeking
         ffmpeg(inputVideoPath)
-            .setStartTime(startTime)
-            .setDuration(duration)
-            .size(`${spec.width}x${spec.height}`)
-            .aspect(spec.aspectRatio)
+            .inputOptions([`-ss ${startTime}`])
+            .duration(duration)
+            .videoFilter(filter)
             .videoCodec('libx264')
             .audioCodec('aac')
             .outputOptions([
-                '-preset fast',
-                '-crf 23'
+                '-preset superfast',
+                '-crf 23',
+                '-movflags +faststart'
             ])
             .output(outputPath)
             .on('start', (commandLine) => {
-                console.log('📊 FFmpeg command:', commandLine);
+                console.log('📊 FFmpeg Clip Command:', commandLine);
             })
-            .on('progress', (progress) => {
-                if (progress.percent) {
-                    console.log(`📊 Progress: ${Math.round(progress.percent)}%`);
+            .on('end', async () => {
+                // Verify file existence and size
+                try {
+                    const stats = await fs.stat(outputPath).catch(() => null);
+                    if (!stats || stats.size < 1000) {
+                        return reject(new Error(`Clip extraction produced an invalid file (${stats?.size || 0} bytes)`));
+                    }
+                    console.log(`✅ Clip extraction completed successfully (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+                    resolve(outputPath);
+                } catch (e) {
+                    reject(e);
                 }
             })
-            .on('end', () => {
-                console.log('✅ Clip extraction completed');
-                resolve(outputPath);
-            })
-            .on('error', (err) => {
-                console.error('❌ FFmpeg error:', err.message);
-                reject(err);
+            .on('error', (err, stdout, stderr) => {
+                console.error('❌ FFmpeg Clip Error:', err.message);
+                console.error('📊 FFmpeg Clip Stderr:', stderr);
+                reject(new Error(`FFmpeg Clip: ${err.message}\nStderr: ${stderr}`));
             })
             .run();
     });
@@ -94,25 +127,49 @@ async function extractClip(inputVideoPath, outputPath, startTime, endTime, platf
  * @returns {Promise<string>} Path to generated thumbnail
  */
 async function generateThumbnail(videoPath, outputPath, timeInSeconds = 5) {
-    return new Promise((resolve, reject) => {
-        console.log(`🖼️  Generating thumbnail at ${timeInSeconds}s`);
+    const fs = require('fs').promises;
 
-        ffmpeg(videoPath)
-            .screenshots({
-                timestamps: [timeInSeconds],
-                filename: path.basename(outputPath),
-                folder: path.dirname(outputPath),
-                size: '1080x1920'
-            })
-            .on('end', () => {
-                console.log('✅ Thumbnail generated');
-                resolve(outputPath);
-            })
-            .on('error', (err) => {
-                console.error('❌ Thumbnail error:', err.message);
-                reject(err);
+    const internalGenerate = async (vPath, outPath, time) => {
+        return new Promise((resolve, reject) => {
+            console.log(`🖼️  FFmpeg extracting frame from ${vPath} at ${time}s`);
+            const { spawn } = require('child_process');
+            const args = [
+                '-i', vPath,
+                '-ss', time.toString(),
+                '-vframes', '1',
+                '-q:v', '2',
+                '-f', 'image2',
+                '-y',
+                outPath
+            ];
+            const proc = spawn(ffmpegPath, args);
+            let stderr = '';
+            proc.stderr.on('data', (data) => stderr += data.toString());
+            proc.on('close', (code) => {
+                if (code === 0) resolve(outPath);
+                else {
+                    console.error(`❌ FFmpeg Thumbnail Stderr: ${stderr}`);
+                    reject(new Error(`FFmpeg Thumbnail exit ${code}: ${stderr}`));
+                }
             });
-    });
+            proc.on('error', (err) => reject(err));
+        });
+    };
+
+    try {
+        // First, check if the video file exists and is not empty
+        const stats = await fs.stat(videoPath).catch(() => null);
+        if (!stats || stats.size < 1000) {
+            throw new Error(`Invalid video file for thumbnailing: ${videoPath} (${stats?.size || 0} bytes)`);
+        }
+
+        await internalGenerate(videoPath, outputPath, timeInSeconds);
+        console.log('✅ Thumbnail generated successfully');
+        return outputPath;
+    } catch (error) {
+        console.warn('⚠️  Thumbnail generation failed, but this might be expected if the clip is small. Error:', error.message);
+        throw error;
+    }
 }
 
 /**
@@ -122,16 +179,27 @@ async function generateThumbnail(videoPath, outputPath, timeInSeconds = 5) {
  * @param {string} bucket - Storage bucket name
  * @returns {Promise<string>} Public URL of uploaded file
  */
-async function uploadToStorage(filePath, fileName, bucket = 'clips') {
+async function uploadToStorage(filePath, fileName, bucket = 'videos') {
     try {
         console.log(`☁️  Uploading ${fileName} to Supabase...`);
 
         const fileBuffer = await fs.readFile(filePath);
 
+        // Determine content type based on extension
+        const ext = path.extname(fileName).toLowerCase();
+        let contentType = 'application/octet-stream';
+        if (ext === '.mp4') contentType = 'video/mp4';
+        else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+        else if (ext === '.png') contentType = 'image/png';
+
+        console.log(`   - File: ${fileName}`);
+        console.log(`   - Size: ${(fileBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`   - ContentType: ${contentType}`);
+
         const { data, error } = await supabase.storage
             .from(bucket)
             .upload(fileName, fileBuffer, {
-                contentType: 'video/mp4',
+                contentType,
                 upsert: true
             });
 

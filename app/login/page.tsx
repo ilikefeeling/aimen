@@ -26,9 +26,10 @@ export default function LoginPage() {
             <div className="glass-card p-12 rounded-[3rem] max-w-md w-full relative z-10 border-gold/20">
                 {/* Logo */}
                 <div className="text-center mb-10">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-panel border-gold/20 text-gold text-xs font-black tracking-[0.15em] uppercase mb-6">
-                        <Sparkles className="w-3 h-3" />
-                        Divine AI Platform
+                    <div className="inline-flex items-center justify-center mb-6">
+                        <div className="w-24 h-24 bg-white/5 rounded-3xl p-4 glass-panel border-gold/20 shadow-divine transform hover:scale-105 transition-transform duration-500">
+                            <img src="/logo.png" alt="aimen logo" className="w-full h-full object-contain" />
+                        </div>
                     </div>
                     <h1 className="text-5xl font-black text-white font-cinzel tracking-widest mb-4">
                         ai<span className="text-gold-gradient">men</span>
@@ -57,12 +58,12 @@ export default function LoginPage() {
                 {/* Kakao Login Button */}
                 <button
                     onClick={handleKakaoLogin}
-                    className="w-full bg-[#FEE500] hover:bg-[#FFEB3B] text-[#3C1E1E] font-black py-5 rounded-2xl transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 shadow-xl text-lg"
+                    className="w-full bg-[#FEE500] hover:bg-[#FADA0A] text-[#3C1E1E] font-black py-5 rounded-2xl transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 shadow-xl text-lg border-none"
                 >
                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 3C6.477 3 2 6.477 2 10.737c0 2.618 1.693 4.93 4.244 6.278-.149.55-.96 3.549-.99 3.776 0 0-.02.166.087.229.107.063.234.017.234.017.309-.043 3.573-2.335 4.135-2.729.752.112 1.529.171 2.29.171 5.523 0 10-3.477 10-7.742S17.523 3 12 3z" />
                     </svg>
-                    카카오로 로그인
+                    카카오로 3초 로그인
                 </button>
 
                 {/* Footer */}

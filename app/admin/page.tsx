@@ -197,7 +197,7 @@ export default function AdminDashboardPage() {
                                 <div key={user.id} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-colors">
                                     <div className="w-12 h-12 bg-navy-lighter rounded-xl flex items-center justify-center overflow-hidden">
                                         {user.image ? (
-                                            <img src={user.image} alt="" className="w-full h-full object-cover" />
+                                            <img src={user.image} alt="" crossOrigin="anonymous" className="w-full h-full object-cover" />
                                         ) : (
                                             <Users className="w-5 h-5 text-gray-600" />
                                         )}

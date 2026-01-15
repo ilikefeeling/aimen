@@ -1,4 +1,8 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleAIFileManager, FileState } = require('@google/generative-ai/server');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -6,9 +10,11 @@ if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY environment variable is required');
 }
 
+// Initialize File Manager
+const fileManager = new GoogleAIFileManager(GEMINI_API_KEY);
+
 /**
  * Retry wrapper with exponential backoff
- * Handles 503 (overload) and 429 (quota) errors
  */
 async function retryWithBackoff(fn, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -16,25 +22,16 @@ async function retryWithBackoff(fn, maxRetries = 3) {
             return await fn();
         } catch (error) {
             const errorMsg = error.message || '';
-            const isOverloaded = errorMsg.includes('overloaded');
-            const is503 = errorMsg.includes('503');
-            const is429 = errorMsg.includes('429');
-            const quotaExceeded = errorMsg.includes('quota');
+            const isOverloaded = errorMsg.includes('overloaded') || errorMsg.includes('503');
+            const isQuota = errorMsg.includes('429') || errorMsg.includes('quota');
 
-            if ((isOverloaded || is503 || is429 || quotaExceeded) && attempt < maxRetries) {
-                let delay = 25000; // Default 25 seconds for quota errors
+            if ((isOverloaded || isQuota) && attempt < maxRetries) {
+                let delay = isQuota ? 30000 : Math.min(1000 * Math.pow(2, attempt - 1), 10000);
 
-                // Extract retry delay from error message if available
                 const retryMatch = errorMsg.match(/retry in ([\d.]+)s/i);
-                if (retryMatch) {
-                    delay = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1000; // Add 1s buffer
-                } else if (!is429 && !quotaExceeded) {
-                    // For 503 errors, use exponential backoff
-                    delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-                }
+                if (retryMatch) delay = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1000;
 
-                const errorType = is429 || quotaExceeded ? 'quota exceeded' : 'overloaded';
-                console.log(`⚠️  Gemini API ${errorType}, retrying in ${delay / 1000}s (attempt ${attempt}/${maxRetries})...`);
+                console.log(`⚠️ Gemini API retry in ${delay / 1000}s (attempt ${attempt}/${maxRetries})...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             } else {
                 throw error;
@@ -44,18 +41,73 @@ async function retryWithBackoff(fn, maxRetries = 3) {
 }
 
 /**
- * Analyze video with Gemini 2.5 Flash
+ * Analyze video with Gemini 1.5 Flash using File API for stability
  */
 async function analyzeVideoWithGemini(videoUrl, title, options = {}) {
     const { onProgress } = options;
+    const tempDir = path.join(__dirname, '../../temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-    console.log('🎥 Starting video analysis...');
-    console.log('   Video URL:', videoUrl);
-    console.log('   Title:', title);
+    const tempFilePath = path.join(tempDir, `gemini-upload-${Date.now()}.mp4`);
+    let fileMeta;
 
     try {
-        onProgress?.(10);
+        onProgress?.(5);
+        console.log('🎥 Downloading video for Gemini upload...');
 
+        // 1. Download to local temp for File API upload
+        const response = await axios({
+            method: 'get',
+            url: videoUrl,
+            responseType: 'stream'
+        });
+
+        const writer = fs.createWriteStream(tempFilePath);
+        response.data.pipe(writer);
+
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+
+        onProgress?.(15);
+        console.log('⬆️ Uploading to Gemini File API...');
+
+        // 2. Upload using File API
+        const uploadResponse = await fileManager.uploadFile(tempFilePath, {
+            mimeType: 'video/mp4',
+            displayName: title,
+        });
+        fileMeta = uploadResponse.file;
+        console.log(`📄 File uploaded: ${fileMeta.name}`);
+
+        onProgress?.(25);
+
+        // 3. Poll for file status (ACTIVE)
+        console.log('⏳ Waiting for video processing...');
+        let file = await fileManager.getFile(fileMeta.name);
+        let pollCount = 0;
+        const maxPolls = 60; // 5 minutes (5s * 60)
+
+        while (file.state === FileState.PROCESSING) {
+            if (pollCount >= maxPolls) {
+                throw new Error('Timeout: Video processing took too long at Gemini');
+            }
+            process.stdout.write('.');
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+            file = await fileManager.getFile(fileMeta.name);
+            pollCount++;
+            onProgress?.(Math.min(25 + pollCount, 70));
+        }
+
+        if (file.state === FileState.FAILED) {
+            throw new Error('Gemini File API: Video processing failed');
+        }
+
+        console.log('\n✅ Video is ACTIVE. Starting analysis...');
+        onProgress?.(75);
+
+        // 4. Generate content
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
@@ -63,8 +115,6 @@ async function analyzeVideoWithGemini(videoUrl, title, options = {}) {
                 responseMimeType: "application/json",
             }
         });
-
-        onProgress?.(20);
 
         const prompt = `당신은 설교 영상 분석 및 숏폼 컨텐츠 제작 전문가입니다. 
 다음 설교 영상을 분석하여 3-5개의 핵심 하이라이트를 추출하고 전체 내용을 요약해주세요.
@@ -88,48 +138,67 @@ async function analyzeVideoWithGemini(videoUrl, title, options = {}) {
 
 **제약 사항:**
 1. 하이라이트 개수: 3~5개
-2. 구간 길이: 각 30초~90초 사이 (가장 은혜로운 대목 위주)
-3. 시간 단위: startTime과 endTime은 반드시 '초(seconds)' 단위의 숫자여야 함
-4. 언어: 모든 텍스트는 한국어로 작성`;
+2. 구간 길이: 각 30초~90초 사이
+3. 시간 단위: startTime과 endTime은 반드시 '초(seconds)' 단위의 숫자
+4. 언어: 모든 텍스트는 한국어
+5. 답변은 반드시 유효한 JSON 객체여야 하며, 다른 설명이나 인사말을 포함하지 마세요.`;
 
-        onProgress?.(30);
+        const parsedData = await retryWithBackoff(async () => {
+            const result = await model.generateContent([
+                {
+                    fileData: {
+                        mimeType: file.mimeType,
+                        fileUri: file.uri
+                    }
+                },
+                { text: prompt },
+            ]);
+            const responseText = result.response.text();
+            console.log('📝 Gemini 2.5 Flash response received');
 
-        console.log('🤖 Calling Gemini 2.5 Flash API...');
-
-        // Use retry wrapper for API call
-        const analysisData = await retryWithBackoff(async () => {
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            const responseText = response.text();
-
-            console.log('📝 Gemini 2.5 Flash JSON response received');
-
+            let parsedData;
             try {
-                const parsedData = JSON.parse(responseText);
-
-                if (!parsedData.highlights || !Array.isArray(parsedData.highlights)) {
-                    throw new Error('Invalid response: highlights array missing');
+                // Try direct parse
+                parsedData = JSON.parse(responseText);
+            } catch (e) {
+                console.warn('⚠️  Standard JSON parse failed, trying extraction...');
+                // Fallback: Use regex to extract JSON block if preamble exists
+                const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    try {
+                        parsedData = JSON.parse(jsonMatch[0]);
+                    } catch (e2) {
+                        console.error('❌ JSON extraction failed:', e2.message);
+                        console.debug('Raw text was:', responseText);
+                        throw new Error('Failed to parse Gemini JSON response (Extraction Error)');
+                    }
+                } else {
+                    console.error('❌ No JSON block found in response');
+                    console.debug('Raw text was:', responseText);
+                    throw new Error('Failed to parse Gemini JSON response (No JSON found)');
                 }
-
-                return parsedData;
-            } catch (parseError) {
-                console.error('JSON parse error:', parseError);
-                console.debug('Raw response:', responseText);
-                throw new Error('Failed to parse Gemini JSON response');
             }
+
+            if (!parsedData.highlights || !Array.isArray(parsedData.highlights)) {
+                throw new Error('Invalid response: highlights array missing');
+            }
+
+            return parsedData;
         });
 
-        onProgress?.(80);
-
-        console.log(`✅ Analysis complete: ${analysisData.highlights.length} highlights generated`);
-
         onProgress?.(100);
+        console.log(`✅ Analysis complete: ${parsedData.highlights.length} highlights`);
 
-        return analysisData;
+        return parsedData;
 
     } catch (error) {
-        console.error('❌ Gemini API Error:', error.message);
+        console.error('❌ Gemini Error:', error.message);
         throw error;
+    } finally {
+        // Cleanup temp file
+        if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+        }
     }
 }
 

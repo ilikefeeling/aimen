@@ -297,6 +297,7 @@ export default function VideoDetailPage() {
                                                         <img
                                                             src={clip.thumbnailUrl}
                                                             alt={highlight.title}
+                                                            crossOrigin="anonymous"
                                                             className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity"
                                                         />
                                                     ) : (

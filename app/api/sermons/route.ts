@@ -3,10 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from '../auth/[...nextauth]/route';
 import { prisma } from '@/lib/prisma';
 
-// GET /api/sermons?userId={userId}
+// GET /api/sermons
 export async function GET(request: NextRequest) {
     try {
-        console.log('[API] /api/sermons GET requested - URL:', request.url);
+        const { searchParams } = new URL(request.url);
+        const isAdminRequest = searchParams.get('admin') === 'true';
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '10');
 
         // Check authentication
         const session = await getServerSession(authOptions);
@@ -18,30 +21,51 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        console.log('[API] User authenticated:', session.user.id);
-        console.log('[API] Attempting to query database with Prisma...');
+        // Admin check if requested
+        let effectiveWhere: any = { userId: session.user.id };
 
-        // Fetch sermons for the authenticated user
-        const sermons = await prisma.sermon.findMany({
-            where: {
-                userId: session.user.id,
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-            select: {
-                id: true,
-                title: true,
-                videoUrl: true,
-                churchName: true,
-                analysisData: true,
-                createdAt: true,
-            },
+        if (isAdminRequest) {
+            const user = await prisma.user.findUnique({
+                where: { id: session.user.id },
+                select: { role: true }
+            });
+
+            if (user?.role === 'ADMIN') {
+                effectiveWhere = {}; // No filter for admin
+            } else if (isAdminRequest) {
+                return NextResponse.json(
+                    { error: 'Forbidden: Admin access required' },
+                    { status: 403 }
+                );
+            }
+        }
+
+        // Fetch sermons with pagination
+        const [sermons, total] = await Promise.all([
+            prisma.sermon.findMany({
+                where: effectiveWhere,
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * limit,
+                take: limit,
+                include: {
+                    user: {
+                        select: { id: true, name: true, email: true }
+                    },
+                    _count: {
+                        select: { highlights: true }
+                    }
+                }
+            }),
+            prisma.sermon.count({ where: effectiveWhere })
+        ]);
+
+        return NextResponse.json({
+            sermons,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         });
-
-        console.log('[API] Query successful, found', sermons.length, 'sermons');
-
-        return NextResponse.json({ sermons });
     } catch (error) {
         console.error('[API] Error fetching sermons:', error);
         console.error('[API] Error details:', {

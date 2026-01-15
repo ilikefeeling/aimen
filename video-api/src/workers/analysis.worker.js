@@ -1,7 +1,11 @@
+// Load environment variables from root .env
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+
 const { Worker } = require('bullmq');
 const { prisma } = require('../services/database');
 const { analyzeVideoWithGemini } = require('../services/gemini');
-const { extractClip, generateThumbnail, uploadToStorage } = require('../services/video-editor');
+const { extractClip, generateThumbnail, uploadToStorage, PLATFORM_SPECS } = require('../services/video-editor');
+const { checkGeminiAuth } = require('../utils/health');
 const path = require('path');
 const fs = require('fs/promises');
 const fsSync = require('fs');
@@ -16,6 +20,13 @@ const worker = new Worker('video-processing', async (job) => {
     console.log(`📹 Processing job ${job.id} for video ${videoId}`);
 
     try {
+        // 0. Health Check
+        console.log('🔍 Checking Gemini API health...');
+        const health = await checkGeminiAuth();
+        if (!health.valid) {
+            throw new Error(`Gemini API Health Check Failed: ${health.message}`);
+        }
+
         // Update status to analyzing
         await prisma.sermon.update({
             where: { id: videoId },
@@ -107,56 +118,68 @@ const worker = new Worker('video-processing', async (job) => {
                     const clipTimestamp = Date.now();
                     const clipPath = path.join(tempDir, `clip-${highlight.id}-${clipTimestamp}.mp4`);
                     const thumbPath = path.join(tempDir, `thumb-${highlight.id}-${clipTimestamp}.jpg`);
-                    const platform = h.platform?.includes('shorts') ? 'youtube' :
-                        h.platform?.includes('reels') ? 'instagram' : 'youtube';
+                    const targetPlatform = h.platform?.includes('shorts') ? 'youtube_shorts' :
+                        h.platform?.includes('reels') ? 'instagram_reels' :
+                            PLATFORM_SPECS[h.platform] ? h.platform : 'youtube_shorts';
+
+                    console.log(`📹 Processing highlight: ${highlight.title} (${targetPlatform})`);
 
                     try {
-                        // Extract clip
-                        await extractClip(inputPath, clipPath, highlight.startTime, highlight.endTime, platform);
+                        // 1. Extract clip
+                        console.log(`     ✂️  Extracting clip using platform: ${targetPlatform}`);
+                        await extractClip(inputPath, clipPath, highlight.startTime, highlight.endTime, targetPlatform);
+                        console.log(`     ✅ Clip extracted to: ${clipPath}`);
 
-                        // Generate thumbnail
-                        const midPoint = (highlight.endTime - highlight.startTime) / 2;
-                        await generateThumbnail(clipPath, thumbPath, midPoint);
+                        // 2. Generate thumbnail with Fallback
+                        console.log(`     🖼️  Generating thumbnail...`);
+                        try {
+                            // Try from clip first at 1s
+                            await generateThumbnail(clipPath, thumbPath, 1);
+                        } catch (thumbErr) {
+                            console.warn(`     ⚠️  Thumbnail from clip failed (${thumbErr.message}), trying from source...`);
+                            // Fallback: extract from original input video at startTime + 1s
+                            await generateThumbnail(inputPath, thumbPath, highlight.startTime + 1);
+                        }
+                        console.log(`     ✅ Thumbnail generated to: ${thumbPath}`);
 
-                        // Upload to Supabase
-                        const clipFileName = `${videoId}/${highlight.id}-${platform}.mp4`;
-                        const thumbFileName = `${videoId}/${highlight.id}-${platform}-thumb.jpg`;
+                        // 3. Upload to storage
+                        console.log(`     ☁️  Uploading files to Supabase...`);
+                        const clipUrl = await uploadToStorage(clipPath, `${videoId}/${highlight.id}-${Date.now()}.mp4`);
+                        const thumbnailUrl = await uploadToStorage(thumbPath, `${videoId}/${highlight.id}-thumb-${Date.now()}.jpg`);
 
-                        const clipUrl = await uploadToStorage(clipPath, clipFileName, 'clips');
-                        const thumbnailUrl = await uploadToStorage(thumbPath, thumbFileName, 'clips');
-
-                        const stats = await fs.stat(clipPath).catch(() => null);
-
-                        // Create Clip record
+                        // 4. Save to database
                         await prisma.clip.create({
                             data: {
                                 highlightId: highlight.id,
-                                platform: platform,
+                                platform: highlight.platform || 'youtube_shorts',
                                 videoUrl: clipUrl,
                                 thumbnailUrl: thumbnailUrl,
                                 duration: highlight.endTime - highlight.startTime,
-                                fileSize: stats ? stats.size : 0,
-                                resolution: platform === 'facebook' ? '1080x1080' : '1080x1920',
+                                resolution: highlight.platform === 'facebook' ? '1080x1080' : '1080x1920',
                                 status: 'COMPLETED'
                             }
                         });
-                        console.log(`     ✅ Clip extracted and uploaded: ${highlight.title}`);
 
-                        // Cleanup clip temp files
-                        await fs.unlink(clipPath).catch(() => { });
-                        await fs.unlink(thumbPath).catch(() => { });
-                    } catch (clipError) {
-                        console.error(`     ❌ Clipping failed for ${highlight.title}:`, clipError.message);
+                        console.log(`✅ Completed highlight: ${highlight.title}`);
+                    } catch (err) {
+                        console.error(`❌ Failed processing highlight ${highlight.title}:`, err.message);
+
+                        // Always create a FAILED record with all required fields
                         await prisma.clip.create({
                             data: {
                                 highlightId: highlight.id,
-                                platform: platform,
-                                status: 'FAILED'
+                                platform: highlight.platform || 'youtube_shorts',
+                                status: 'FAILED',
+                                duration: 0,
+                                resolution: highlight.platform === 'facebook' ? '1080x1080' : '1080x1920'
                             }
                         });
+                    } finally {
+                        try { if (require('fs').existsSync(clipPath)) require('fs').unlinkSync(clipPath); } catch (e) { }
+                        try { if (require('fs').existsSync(thumbPath)) require('fs').unlinkSync(thumbPath); } catch (e) { }
                     }
                 } catch (highlightError) {
-                    console.error(`  ⚠️ Failed to process highlight:`, highlightError.message);
+                    console.error(`  ❌ CRITICAL: Failed to process highlight loop:`, highlightError);
                 }
             }
 
