@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
-import { prisma } from '@/lib/prisma';
+export const revalidate = 0;
 
 // Admin 권한 검증 헬퍼
 async function verifyAdmin() {
