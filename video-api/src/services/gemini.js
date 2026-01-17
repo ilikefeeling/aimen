@@ -41,10 +41,10 @@ async function retryWithBackoff(fn, maxRetries = 3) {
 }
 
 /**
- * Analyze video with Gemini 1.5 Flash using File API for stability
+ * Analyze video with Gemini using File API for stability
  */
 async function analyzeVideoWithGemini(videoUrl, title, options = {}) {
-    const { onProgress } = options;
+    const { onProgress, targetLanguage = 'korean' } = options;
     const tempDir = path.join(__dirname, '../../temp');
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
@@ -116,32 +116,48 @@ async function analyzeVideoWithGemini(videoUrl, title, options = {}) {
             }
         });
 
-        const prompt = `당신은 설교 영상 분석 및 숏폼 컨텐츠 제작 전문가입니다. 
-다음 설교 영상을 분석하여 3-5개의 핵심 하이라이트를 추출하고 전체 내용을 요약해주세요.
+        const prompt = `당신은 전문 영상 자막 제작자이자 다국어 번역 전문가, 설교 영상 분석 전문가입니다. 
+제공된 설교 영상의 음성을 분석하여 ${targetLanguage === 'korean' ? '핵심 하이라이트' : targetLanguage + ' 외국어 자막 및 하이라이트'}를 생성하는 것이 당신의 임무입니다.
 
 영상 제목: "${title}"
+선택된 대상 언어: ${targetLanguage}
+
+**[업무 지침]**
+1. **내용 분석**: 영상의 음성을 인식하여 핵심 메시지가 담긴 하이라이트 3-5개를 추출하십시오.
+2. **자막 생성 (STT 및 번역)**: 영상 전체 또는 주요 구간에 대해 다음 원칙에 따라 자막 데이터를 생성하십시오.
+   - **타임코드**: 각 문장의 시작과 끝 시간을 초(seconds) 단위의 숫자로 정확히 측정하십시오.
+   - **자연스러운 번역**: 단순 직역이 아닌 문맥에 맞는 의역을 우선하며, 해당 언어권의 통용 어휘를 사용하십시오.
+   - **가독성**: 자막 한 줄당 글자 수는 20자 내외로 제한하십시오.
+   - **무음 구간**: 음성이 없는 구간은 자막을 생성하지 마십시오.
 
 반드시 다음 JSON 구조를 정확히 지켜주세요:
 {
   "highlights": [
     {
-      "title": "시청자의 관심을 끌 수 있는 강렬한 제목",
+      "title": "강렬한 하이라이트 제목",
       "startTime": 120, 
       "endTime": 180,
-      "caption": "영상 하단에 표시될 자막용 텍스트 (60자 내외)",
-      "emotion": "감동적인 | 은혜로운 | 도전적인 | 위로가 되는 | 유머러스한",
-      "platform": "youtube_shorts | instagram_reels | tiktok"
+      "caption": "영상 하단 표시용 번역된 자막 (선택 언어)",
+      "emotion": "감동적인 | 은혜로운 | 도전적인",
+      "platform": "youtube_shorts | instagram_reels"
     }
   ],
-  "summary": "전체 설교의 핵심 메시지를 요약 (3문장 이내)"
+  "subtitles": [
+    {
+      "index": 1,
+      "startTime": 1.5,
+      "endTime": 4.2,
+      "text": "번역된 자막 내용 (선택 언어: ${targetLanguage})"
+    }
+  ],
+  "summary": "전체 설교의 핵심 메시지 요약 (번역된 언어)"
 }
 
 **제약 사항:**
 1. 하이라이트 개수: 3~5개
-2. 구간 길이: 각 30초~90초 사이
-3. 시간 단위: startTime과 endTime은 반드시 '초(seconds)' 단위의 숫자
-4. 언어: 모든 텍스트는 한국어
-5. 답변은 반드시 유효한 JSON 객체여야 하며, 다른 설명이나 인사말을 포함하지 마세요.`;
+2. 하이라이트 구간 길이: 30초~90초
+3. 모든 텍스트(제목, 캡션, 자막, 요약)는 반드시 선택된 언어(${targetLanguage})로 작성하십시오.
+4. 답변은 반드시 유효한 JSON 객체여야 하며, 다른 설명이나 인사말을 포함하지 마세요.`;
 
         const parsedData = await retryWithBackoff(async () => {
             const result = await model.generateContent([

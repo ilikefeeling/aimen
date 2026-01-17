@@ -14,7 +14,9 @@ import {
     Menu,
     X,
     Sparkles,
-    Shield
+    Shield,
+    Crown,
+    Home
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -51,6 +53,7 @@ export default function DashboardLayout({
         { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
         { label: 'My Videos', path: '/dashboard/videos', icon: Video },
         { label: 'Upload', path: '/dashboard/upload', icon: Upload },
+        { label: 'Upgrade', path: '/dashboard/upgrade', icon: Crown },
     ];
 
 
@@ -65,7 +68,7 @@ export default function DashboardLayout({
                         {/* Logo & Branding */}
                         <div
                             className="flex items-center gap-3 cursor-pointer group"
-                            onClick={() => router.push('/dashboard')}
+                            onClick={() => router.push('/')}
                         >
                             <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center shadow-divine group-hover:scale-110 transition-transform p-1.5 border border-white/10">
                                 <img src="/logo.png" alt="aimen logo" className="w-full h-full object-contain" />
@@ -82,6 +85,13 @@ export default function DashboardLayout({
 
                         {/* Desktop Navigation */}
                         <nav className="hidden md:flex items-center gap-1.5">
+                            <button
+                                onClick={() => router.push('/')}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                            >
+                                <Home className="w-4 h-4" />
+                                Home
+                            </button>
                             {NAV_ITEMS.map((item) => (
                                 <button
                                     key={item.path}

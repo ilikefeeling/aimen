@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resolveApiUrl } from '@/lib/api/config';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
@@ -28,7 +29,7 @@ export default function VideosPage() {
 
     const fetchSermons = async () => {
         try {
-            const response = await fetch('/api/sermons');
+            const response = await fetch(resolveApiUrl('/api/sermons'));
             if (!response.ok) throw new Error('Failed to fetch sermons');
             const data = await response.json();
             setSermons(data.sermons || []);
@@ -111,7 +112,7 @@ export default function VideosPage() {
                     </p>
                 </div>
                 <Link href="/dashboard/upload">
-                    <Button className="bg-gradient-gold text-navy px-8 py-4 rounded-2xl font-black shadow-gold flex items-center gap-3 hover:scale-105 transition-transform">
+                    <Button className="bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] px-8 py-4 rounded-2xl font-black shadow-gold flex items-center gap-3 hover:scale-105 transition-transform border-none">
                         <Plus className="w-6 h-6 stroke-[3]" /> 새 영상 업로드
                     </Button>
                 </Link>
@@ -140,7 +141,7 @@ export default function VideosPage() {
                         첫 번째 영상을 업로드하여 AI 분석을 시작하세요.
                     </p>
                     <Link href="/dashboard/upload">
-                        <Button size="lg" className="bg-gold text-navy shadow-gold hover:scale-105 transition-all rounded-2xl px-12 py-6 text-xl font-black">
+                        <Button size="lg" className="bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] shadow-gold hover:scale-105 transition-all rounded-2xl px-12 py-6 text-xl font-black border-none">
                             사역 시작하기
                         </Button>
                     </Link>
@@ -165,7 +166,7 @@ export default function VideosPage() {
                                 {/* Hover Play Overlay */}
                                 <div
                                     className="absolute inset-0 z-30 opacity-0 group-hover:opacity-100 flex items-center justify-center bg-navy-darker/60 backdrop-blur-[2px] transition-all duration-300 cursor-pointer"
-                                    onClick={() => router.push(`/dashboard/videos/${sermon.id}`)}
+                                    onClick={() => router.push(`/dashboard/videos/detail?id=${sermon.id}`)}
                                 >
                                     <div className="w-20 h-20 bg-gradient-gold rounded-full flex items-center justify-center shadow-gold-lg transform scale-50 group-hover:scale-100 transition-transform duration-500">
                                         <Play className="w-10 h-10 text-navy fill-current ml-2" />
@@ -193,7 +194,7 @@ export default function VideosPage() {
 
                                 <div className="mt-auto grid grid-cols-2 gap-4">
                                     <Link
-                                        href={`/dashboard/videos/${sermon.id}`}
+                                        href={`/dashboard/videos/detail?id=${sermon.id}`}
                                         className="w-full bg-gold/10 hover:bg-gold text-gold hover:text-navy py-4 rounded-2xl font-black text-sm transition-all border border-gold/20 text-center flex items-center justify-center"
                                     >
                                         상세 분석

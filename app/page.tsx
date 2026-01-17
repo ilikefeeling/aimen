@@ -21,7 +21,9 @@ import {
   MessageSquare,
   TrendingUp,
   Award,
-  Scissors
+  Scissors,
+  Globe,
+  Languages
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -83,7 +85,7 @@ export default function HomePage() {
             ) : (
               <Button
                 onClick={() => signIn('kakao')}
-                className="bg-yellow-bright hover:bg-gold-light text-navy px-6 py-2 rounded-full font-bold shadow-divine hover:scale-105 transition-all text-sm"
+                className="bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] px-6 py-2 rounded-full font-bold shadow-divine hover:scale-105 transition-all text-sm"
               >
                 무료 체험하기
               </Button>
@@ -118,7 +120,7 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in" style={{ animationDelay: '0.4s' }}>
             <button
               onClick={() => signIn('kakao')}
-              className="bg-yellow-bright hover:bg-gold-light text-navy px-12 py-6 rounded-2xl font-black text-xl shadow-divine transform hover:scale-110 active:scale-95 transition-all duration-300 flex items-center gap-3 group"
+              className="bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] px-12 py-6 rounded-2xl font-black text-xl shadow-divine transform hover:scale-110 active:scale-95 transition-all duration-300 flex items-center gap-3 group"
             >
               카카오로 시작하기
               <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
@@ -236,10 +238,10 @@ export default function HomePage() {
 
             <Card className="glass-card p-12 space-y-8 group">
               <div className="w-20 h-20 bg-gold/5 rounded-3xl flex items-center justify-center border border-gold/10 shadow-inner group-hover:bg-gold/10 transition-colors">
-                <Award className="w-10 h-10 text-gold" />
+                <Languages className="w-10 h-10 text-gold" />
               </div>
-              <h3 className="text-3xl font-black text-white tracking-tight">프리미엄 퀄리티</h3>
-              <p className="text-gray-400 leading-relaxed text-lg">Aesthetic Divine 테마가 적용된 세련된 디자인. 교회의 격조를 지키면서도 MZ 세대의 감성을 자극하는 고품격 시각 요소를 자동 생성합니다.</p>
+              <h3 className="text-3xl font-black text-white tracking-tight">글로벌 다국어 지원</h3>
+              <p className="text-gray-400 leading-relaxed text-lg">AI 음성 복제(Voice Cloning)와 정교한 다국어 자막 기능을 통해, 전 세계 열방을 향한 선교의 지경을 막힘 없이 넓혀드립니다.</p>
             </Card>
           </div>
         </div>
@@ -288,7 +290,7 @@ export default function HomePage() {
               </div>
               <ul className="space-y-6 mb-16">
                 {[
-                  "총 3개의 설교 영상 분석",
+                  "1 개의 설교 영상 분석",
                   "개별 하이라이트 3-5개 추출",
                   "표준 SNS 자막 레이아웃 제공",
                   "공유용 공개 URL 생성"
@@ -299,8 +301,11 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <Button onClick={() => signIn('kakao')} className="w-full py-6 rounded-2xl border border-white/10 hover:border-gold/50 bg-white/5 hover:bg-gold/10 text-white font-black text-lg transition-all shadow-none">
-                무료로 시작하기
+              <Button
+                onClick={() => status === 'authenticated' ? router.push('/dashboard') : signIn('kakao', { callbackUrl: '/dashboard' })}
+                className="w-full py-6 rounded-2xl border border-[#FEE500]/30 hover:bg-[#FEE500]/10 text-white font-black text-lg transition-all shadow-none"
+              >
+                {status === 'authenticated' ? '대시보드로 이동' : '무료로 시작하기'}
               </Button>
             </div>
 
@@ -308,7 +313,7 @@ export default function HomePage() {
               <div className="absolute top-8 right-8 bg-gold text-navy text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.3em] shadow-glow">Most Chosen</div>
               <h4 className="text-lg font-black text-gold mb-4 uppercase tracking-[0.2em]">Prophet Plan</h4>
               <div className="flex items-baseline gap-2 mb-12">
-                <span className="text-7xl font-black text-white">₩29,000</span>
+                <span className="text-7xl font-black text-white">₩99,000</span>
                 <span className="text-gray-500 font-bold tracking-widest text-sm">/ 월</span>
               </div>
               <ul className="space-y-6 mb-16">
@@ -325,8 +330,11 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <Button onClick={() => signIn('kakao')} className="w-full py-6 rounded-2xl bg-gold hover:bg-gold-light text-navy font-black text-lg shadow-divine transform group-hover:scale-105 transition-all">
-                프로 라이선스 획득
+              <Button
+                onClick={() => status === 'authenticated' ? router.push('/dashboard/upgrade') : signIn('kakao', { callbackUrl: '/dashboard/upgrade' })}
+                className="w-full py-6 rounded-2xl bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] font-black text-lg shadow-divine transform group-hover:scale-105 transition-all border-none"
+              >
+                {status === 'authenticated' ? '업그레이드 하기' : '프로 라이선스 획득'}
               </Button>
             </div>
           </div>
@@ -345,10 +353,10 @@ export default function HomePage() {
             <p className="text-2xl md:text-3xl text-gray-500 font-medium">세상의 목소리가 아닌, 주님의 말씀이 알고리즘을 타게 하세요.</p>
             <div className="pt-10">
               <button
-                onClick={() => signIn('kakao')}
-                className="bg-yellow-bright hover:bg-gold-light text-navy px-20 py-8 rounded-[2rem] font-black text-3xl shadow-divine transition-all hover:scale-110 active:scale-95 animate-glow-pulse"
+                onClick={() => status === 'authenticated' ? router.push('/dashboard') : signIn('kakao', { callbackUrl: '/dashboard' })}
+                className="bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] px-20 py-8 rounded-[2rem] font-black text-3xl shadow-divine transition-all hover:scale-110 active:scale-95 animate-glow-pulse"
               >
-                카카오로 3초 만에 체험
+                {status === 'authenticated' ? '대시보드 접속' : '카카오로 3초 만에 체험'}
               </button>
             </div>
             <div className="flex justify-center gap-12 mt-16 pt-16 border-t border-white/5 opacity-30 text-gray-400 font-bold uppercase tracking-widest text-xs">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resolveApiUrl } from '@/lib/api/config';
 import Link from 'next/link';
 import {
     Users,
@@ -62,7 +63,7 @@ export default function AdminDashboardPage() {
 
     const fetchStats = async () => {
         try {
-            const res = await fetch('/api/admin/stats');
+            const res = await fetch(resolveApiUrl('/api/admin/stats'));
             if (!res.ok) throw new Error('Failed to fetch stats');
             const data = await res.json();
             setStats(data.stats);

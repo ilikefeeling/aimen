@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resolveApiUrl } from '@/lib/api/config';
 import ClipGenerator from '@/components/ClipGenerator';
 
 export default function ClipTestPage() {
@@ -13,7 +14,7 @@ export default function ClipTestPage() {
 
     const fetchLatestSermon = async () => {
         try {
-            const response = await fetch('/api/sermons');
+            const response = await fetch(resolveApiUrl('/api/sermons'));
             const data = await response.json();
 
             if (data.sermons && data.sermons.length > 0) {

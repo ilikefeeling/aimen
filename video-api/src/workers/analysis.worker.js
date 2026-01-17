@@ -4,20 +4,23 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 const { Worker } = require('bullmq');
 const { prisma } = require('../services/database');
 const { analyzeVideoWithGemini } = require('../services/gemini');
-const { extractClip, generateThumbnail, uploadToStorage, PLATFORM_SPECS } = require('../services/video-editor');
+const { generateDubbedAudio, dubVideoClip, createVoiceClone } = require('../services/elevenlabs');
+const { generateLipsyncVideo } = require('../services/heygen');
+const { extractClip, generateThumbnail, uploadToStorage, PLATFORM_SPECS, extractAudio } = require('../services/video-editor');
 const { checkGeminiAuth } = require('../utils/health');
 const path = require('path');
 const fs = require('fs/promises');
 const fsSync = require('fs');
+const os = require('os');
 const { Readable } = require('stream');
 
 console.log('🔧 Starting AI Analysis Worker...');
 
 // Create worker
 const worker = new Worker('video-processing', async (job) => {
-    const { videoId, videoUrl, userId, title } = job.data;
+    const { videoId, videoUrl, userId, title, targetLanguages = ['korean'], dubbingTone = 'professional' } = job.data;
 
-    console.log(`📹 Processing job ${job.id} for video ${videoId}`);
+    console.log(`📹 Processing job ${job.id} for video ${videoId} (Languages: ${targetLanguages.join(', ')})`);
 
     try {
         // 0. Health Check
@@ -33,38 +36,229 @@ const worker = new Worker('video-processing', async (job) => {
             data: {
                 analysisData: {
                     status: 'ANALYZING',
-                    progress: 10,
-                    startedAt: new Date().toISOString()
+                    progress: 5,
+                    startedAt: new Date().toISOString(),
+                    targetLanguages
                 }
             },
         });
 
-        job.updateProgress(10);
-        console.log(`  ✓ Status updated to ANALYZING`);
+        job.updateProgress(5);
 
-        // Fetch video from Supabase
-        console.log(`  🔍 Fetching video from: ${videoUrl}`);
-        job.updateProgress(20);
+        // 1. Download original video once
+        const tempDir = path.join(os.tmpdir(), 'aimen-video-temp');
+        await fs.mkdir(tempDir, { recursive: true });
+        const timestamp = Date.now();
+        const inputPath = path.join(tempDir, `input-${videoId}-${timestamp}.mp4`);
 
-        // Call Gemini AI for analysis
-        console.log(`  🤖 Starting Gemini AI analysis...`);
-        const analysisResult = await analyzeVideoWithGemini(videoUrl, title, {
+        console.log(`     ⬇️  Downloading original video...`);
+        const response = await fetch(videoUrl);
+        if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
+
+        const fileStream = fsSync.createWriteStream(inputPath);
+        await new Promise((resolve, reject) => {
+            Readable.fromWeb(response.body).pipe(fileStream);
+            fileStream.on('finish', resolve);
+            fileStream.on('error', reject);
+        });
+        console.log(`     ✅ Download complete: ${inputPath}`);
+
+        // 1.5 Extract Voice Sample and Clone (New Feature)
+        let clonedVoiceId = null;
+        if (targetLanguages.length > 1) { // If non-korean languages are selected
+            const samplePath = path.join(tempDir, `sample-${videoId}.mp3`);
+
+            await prisma.sermon.update({
+                where: { id: videoId },
+                data: { analysisData: { ...job.data.analysisData, currentStep: '🎙️ 화자 목소리 추출 중...', progress: 15 } }
+            });
+            job.updateProgress({ progress: 15, currentStep: '🎙️ 화자 목소리 추출 중...' });
+
+            try {
+                // Extract first 60 seconds for cloning
+                await extractAudio(inputPath, samplePath, 0, 60);
+
+                await prisma.sermon.update({
+                    where: { id: videoId },
+                    data: { analysisData: { ...job.data.analysisData, currentStep: '🧠 AI 목소리 클로닝 중...', progress: 18 } }
+                });
+                job.updateProgress({ progress: 18, currentStep: '🧠 AI 목소리 클로닝 중...' });
+
+                clonedVoiceId = await createVoiceClone(samplePath, `${title} - Pastor`);
+
+                // Cleanup sample
+                await fs.unlink(samplePath).catch(() => { });
+            } catch (err) {
+                console.error('⚠️ Voice cloning failed, falling back to professional voice:', err.message);
+            }
+        }
+        job.updateProgress({ progress: 20, currentStep: '🤖 베이스 분석 시작...' });
+
+        // 2. Base Analysis (Korean) - To get highlights timestamps
+        console.log(`  🤖 Starting Base Analysis (Korean)...`);
+        const baseResult = await analyzeVideoWithGemini(videoUrl, title, {
+            targetLanguage: 'korean',
             onProgress: (percent) => {
-                const progress = 20 + (percent * 0.6); // 20-80%
-                job.updateProgress(Math.floor(progress));
-                console.log(`  📊 Analysis progress: ${percent}%`);
-            },
+                const progress = 20 + (percent * 0.15); // 20-35%
+                job.updateProgress({ progress: Math.floor(progress), currentStep: '📖 설교 내용 분석 중 (한국어)...' });
+            }
         });
 
-        job.updateProgress(90);
-        console.log(`  ✓ Analysis completed`);
+        await prisma.sermon.update({
+            where: { id: videoId },
+            data: { analysisData: { ...baseResult, currentStep: '📖 설교 내용 분석 중 (한국어)...', progress: 35 } }
+        });
 
-        // Save results to database
+        // Store base results
+        const masterAnalysisData = {
+            ...baseResult,
+            translations: {},
+            status: 'PROCESSING_CLIPS',
+            progress: 35,
+            completedAt: null
+        };
+
+        await prisma.sermon.update({
+            where: { id: videoId },
+            data: { analysisData: masterAnalysisData },
+        });
+
+        // 3. Process each language
+        const totalLangs = targetLanguages.length;
+        for (let i = 0; i < totalLangs; i++) {
+            const lang = targetLanguages[i];
+            console.log(`🌍 Processing Language [${i + 1}/${totalLangs}]: ${lang}`);
+
+            let langResult = baseResult;
+            if (lang !== 'korean') {
+                // For non-korean, call Gemini again for translation (or translate via prompt)
+                // For accuracy and STT sync, we call the full analysis for the target language
+                await prisma.sermon.update({
+                    where: { id: videoId },
+                    data: { analysisData: { ...masterAnalysisData, currentStep: `🌍 ${lang} 번역 및 분석 중...`, progress: 35 + (i * (60 / totalLangs)) } }
+                });
+
+                langResult = await analyzeVideoWithGemini(videoUrl, title, {
+                    targetLanguage: lang,
+                    onProgress: (percent) => {
+                        const baseProgress = 35 + (i * (60 / totalLangs));
+                        const stepProgress = (percent * (60 / totalLangs) * 0.3);
+                        const totalProgress = Math.floor(baseProgress + stepProgress);
+                        job.updateProgress({ progress: totalProgress, currentStep: `🌍 ${lang} 번역 및 분석 중...` });
+                    }
+                });
+                masterAnalysisData.translations[lang] = langResult;
+            }
+
+            // Generate Highlights and Clips for this language
+            if (langResult.highlights && langResult.highlights.length > 0) {
+                for (const h of langResult.highlights) {
+                    try {
+                        // Find or Create Highlight (Base timestamps should match)
+                        // We use the Korean version as the master for ID if possible, but for now simple creation
+                        let highlight = await prisma.highlight.findFirst({
+                            where: { sermonId: videoId, startTime: parseInt(h.startTime) }
+                        });
+
+                        if (!highlight) {
+                            highlight = await prisma.highlight.create({
+                                data: {
+                                    sermonId: videoId,
+                                    title: h.title || 'Untitled',
+                                    startTime: parseInt(h.startTime) || 0,
+                                    endTime: parseInt(h.endTime) || 0,
+                                    caption: h.caption || '',
+                                    emotion: h.emotion || null,
+                                    platform: h.platform || null,
+                                },
+                            });
+                        }
+
+                        // Process Video Clipping for this language
+                        const clipTimestamp = Date.now();
+                        const clipPath = path.join(tempDir, `clip-${highlight.id}-${lang}-${clipTimestamp}.mp4`);
+                        const thumbPath = path.join(tempDir, `thumb-${highlight.id}-${lang}-${clipTimestamp}.jpg`);
+                        const targetPlatform = h.platform?.includes('shorts') ? 'youtube_shorts' :
+                            h.platform?.includes('reels') ? 'instagram_reels' : 'youtube_shorts';
+
+                        // 1. Extract clip
+                        await extractClip(inputPath, clipPath, highlight.startTime, highlight.endTime, targetPlatform);
+
+                        // 2. Generate thumbnail
+                        try { await generateThumbnail(clipPath, thumbPath, 1); } catch (e) { }
+
+                        // 3. AI Dubbing (Only for non-korean)
+                        let dubbedUrl = null;
+                        if (lang !== 'korean') {
+                            try {
+                                const dubbedAudioPath = await generateDubbedAudio(h.caption, {
+                                    targetLanguage: lang,
+                                    tone: dubbingTone,
+                                    voiceId: clonedVoiceId // Use cloned voice if available
+                                });
+                                const dubbedClipPath = path.join(tempDir, `dubbed-${highlight.id}-${lang}-${Date.now()}.mp4`);
+                                await dubVideoClip(clipPath, dubbedAudioPath, dubbedClipPath);
+
+                                // 3.5. AI Lipsync (HeyGen 연동 - 선택 사항)
+                                if (process.env.HEYGEN_API_KEY) {
+                                    try {
+                                        await prisma.sermon.update({
+                                            where: { id: videoId },
+                                            data: { analysisData: { ...masterAnalysisData, currentStep: `👄 ${lang} 립싱크 보정 중 (HeyGen)...`, progress: job.progress } }
+                                        });
+
+                                        const lipsyncedUrl = await generateLipsyncVideo(clipPath, dubbedAudioPath);
+                                        if (lipsyncedUrl) {
+                                            console.log(`✅ HeyGen Lipsync completed for ${lang}:`, lipsyncedUrl);
+                                            dubbedUrl = lipsyncedUrl; // Use lipsynced version
+                                        }
+                                    } catch (heygenErr) {
+                                        console.error(`⚠️ HeyGen Lipsync failed for ${lang}:`, heygenErr.message);
+                                    }
+                                }
+
+                                dubbedUrl = dubbedUrl || await uploadToStorage(dubbedClipPath, `${videoId}/${highlight.id}-${lang}-dubbed.mp4`);
+
+                                // Clean up dubbed temp files
+                                [dubbedAudioPath, dubbedClipPath].forEach(p => { try { if (fsSync.existsSync(p)) fsSync.unlinkSync(p); } catch (e) { } });
+                            } catch (dubErr) { console.error(`⚠️ Dubbing failed for ${lang}:`, dubErr.message); }
+                        }
+
+                        // 4. Upload standard clip (original audio with target language captions in metadata or for display)
+                        const clipUrl = await uploadToStorage(clipPath, `${videoId}/${highlight.id}-${lang}.mp4`);
+                        const thumbnailUrl = await uploadToStorage(thumbPath, `${videoId}/${highlight.id}-${lang}-thumb.jpg`);
+
+                        // 5. Save Clip record
+                        await prisma.clip.create({
+                            data: {
+                                highlightId: highlight.id,
+                                platform: targetPlatform,
+                                language: lang,
+                                videoUrl: clipUrl,
+                                dubbedUrl: dubbedUrl,
+                                thumbnailUrl: thumbnailUrl,
+                                duration: highlight.endTime - highlight.startTime,
+                                resolution: '1080x1920',
+                                status: 'COMPLETED'
+                            }
+                        });
+
+                        // Clean up
+                        [clipPath, thumbPath].forEach(p => { try { if (fsSync.existsSync(p)) fsSync.unlinkSync(p); } catch (e) { } });
+
+                    } catch (err) {
+                        console.error(`❌ Error processing highlight in ${lang}:`, err.message);
+                    }
+                }
+            }
+        }
+
+        // Final completion update
         await prisma.sermon.update({
             where: { id: videoId },
             data: {
                 analysisData: {
-                    ...analysisResult,
+                    ...masterAnalysisData,
                     status: 'COMPLETED',
                     progress: 100,
                     completedAt: new Date().toISOString()
@@ -72,130 +266,11 @@ const worker = new Worker('video-processing', async (job) => {
             },
         });
 
-        console.log(`  ✓ Results saved to database`);
-
-        // Create highlights in database
-        if (analysisResult.highlights && analysisResult.highlights.length > 0) {
-            console.log(`  📝 Processing ${analysisResult.highlights.length} highlights with video extraction...`);
-
-            // 1. Download original video once
-            const tempDir = path.join(__dirname, '../../temp');
-            await fs.mkdir(tempDir, { recursive: true });
-            const timestamp = Date.now();
-            const inputPath = path.join(tempDir, `input-${videoId}-${timestamp}.mp4`);
-
-            console.log(`     ⬇️  Downloading original video for clipping...`);
-            const response = await fetch(videoUrl);
-            if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
-
-            const fileStream = fsSync.createWriteStream(inputPath);
-            await new Promise((resolve, reject) => {
-                Readable.fromWeb(response.body).pipe(fileStream);
-                fileStream.on('finish', resolve);
-                fileStream.on('error', reject);
-            });
-            console.log(`     ✅ Download complete: ${inputPath}`);
-
-            for (const h of analysisResult.highlights) {
-                try {
-                    // Create Highlight record
-                    const highlight = await prisma.highlight.create({
-                        data: {
-                            sermonId: videoId,
-                            title: h.title || 'Untitled Highlight',
-                            startTime: parseInt(h.startTime) || 0,
-                            endTime: parseInt(h.endTime) || 0,
-                            caption: h.caption || '',
-                            emotion: h.emotion || null,
-                            platform: h.platform || null,
-                            createdAt: new Date(),
-                        },
-                    });
-
-                    console.log(`     ✨ Highlight created: ${highlight.id}`);
-
-                    // Process Video Clipping
-                    const clipTimestamp = Date.now();
-                    const clipPath = path.join(tempDir, `clip-${highlight.id}-${clipTimestamp}.mp4`);
-                    const thumbPath = path.join(tempDir, `thumb-${highlight.id}-${clipTimestamp}.jpg`);
-                    const targetPlatform = h.platform?.includes('shorts') ? 'youtube_shorts' :
-                        h.platform?.includes('reels') ? 'instagram_reels' :
-                            PLATFORM_SPECS[h.platform] ? h.platform : 'youtube_shorts';
-
-                    console.log(`📹 Processing highlight: ${highlight.title} (${targetPlatform})`);
-
-                    try {
-                        // 1. Extract clip
-                        console.log(`     ✂️  Extracting clip using platform: ${targetPlatform}`);
-                        await extractClip(inputPath, clipPath, highlight.startTime, highlight.endTime, targetPlatform);
-                        console.log(`     ✅ Clip extracted to: ${clipPath}`);
-
-                        // 2. Generate thumbnail with Fallback
-                        console.log(`     🖼️  Generating thumbnail...`);
-                        try {
-                            // Try from clip first at 1s
-                            await generateThumbnail(clipPath, thumbPath, 1);
-                        } catch (thumbErr) {
-                            console.warn(`     ⚠️  Thumbnail from clip failed (${thumbErr.message}), trying from source...`);
-                            // Fallback: extract from original input video at startTime + 1s
-                            await generateThumbnail(inputPath, thumbPath, highlight.startTime + 1);
-                        }
-                        console.log(`     ✅ Thumbnail generated to: ${thumbPath}`);
-
-                        // 3. Upload to storage
-                        console.log(`     ☁️  Uploading files to Supabase...`);
-                        const clipUrl = await uploadToStorage(clipPath, `${videoId}/${highlight.id}-${Date.now()}.mp4`);
-                        const thumbnailUrl = await uploadToStorage(thumbPath, `${videoId}/${highlight.id}-thumb-${Date.now()}.jpg`);
-
-                        // 4. Save to database
-                        await prisma.clip.create({
-                            data: {
-                                highlightId: highlight.id,
-                                platform: highlight.platform || 'youtube_shorts',
-                                videoUrl: clipUrl,
-                                thumbnailUrl: thumbnailUrl,
-                                duration: highlight.endTime - highlight.startTime,
-                                resolution: highlight.platform === 'facebook' ? '1080x1080' : '1080x1920',
-                                status: 'COMPLETED'
-                            }
-                        });
-
-                        console.log(`✅ Completed highlight: ${highlight.title}`);
-                    } catch (err) {
-                        console.error(`❌ Failed processing highlight ${highlight.title}:`, err.message);
-
-                        // Always create a FAILED record with all required fields
-                        await prisma.clip.create({
-                            data: {
-                                highlightId: highlight.id,
-                                platform: highlight.platform || 'youtube_shorts',
-                                status: 'FAILED',
-                                duration: 0,
-                                resolution: highlight.platform === 'facebook' ? '1080x1080' : '1080x1920'
-                            }
-                        });
-                    } finally {
-                        try { if (require('fs').existsSync(clipPath)) require('fs').unlinkSync(clipPath); } catch (e) { }
-                        try { if (require('fs').existsSync(thumbPath)) require('fs').unlinkSync(thumbPath); } catch (e) { }
-                    }
-                } catch (highlightError) {
-                    console.error(`  ❌ CRITICAL: Failed to process highlight loop:`, highlightError);
-                }
-            }
-
-            // Cleanup original temp video
-            await fs.unlink(inputPath).catch(() => { });
-            console.log(`     🗑️  Original temp video cleaned up`);
-        }
-
+        // Cleanup original
+        await fs.unlink(inputPath).catch(() => { });
         job.updateProgress(100);
 
-        return {
-            success: true,
-            videoId,
-            highlightsCount: analysisResult.highlights?.length || 0,
-            message: 'Analysis completed successfully',
-        };
+        return { success: true, videoId, languagesProcessed: targetLanguages };
 
     } catch (error) {
         console.error(`❌ Job ${job.id} failed:`, error);

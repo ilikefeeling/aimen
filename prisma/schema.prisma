@@ -1,4 +1,3 @@
-// 1. 설정: 데이터베이스 연결 및 클라이언트 생성
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,46 +8,39 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// 2. 사용자 모델: 카카오 로그인 및 결제 상태 관리
 model User {
   id            String    @id @default(cuid())
   name          String?
   email         String?   @unique
-  image         String?   // 프로필 이미지
-  kakaoId       String?   @unique // 카카오 고유 식별자
+  image         String?
+  kakaoId       String?   @unique
   emailVerified DateTime?
-  
-  // 비즈니스 로직 관련
-  role          Role      @default(USER)     // USER, ADMIN(사용자 승인 권한)
-  status        Status    @default(PENDING)  // PENDING(승인대기), ACTIVE(승인완료)
-  plan          Plan      @default(FREE)     // FREE, PRO(유료결제자)
-  
-  // 관계 설정
-  sermons       Sermon[]  // 사용자가 업로드한 설교 목록
-  payments      Payment[] // 결제 이력
-  accounts      Account[]
-  sessions      Session[]
+  role          Role      @default(USER)
+  status        Status    @default(PENDING)
+  plan          Plan      @default(FREE)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  payments      Payment[]
+  sermons       Sermon[]
+  sessions      Session[]
 }
 
-// NextAuth required models
 model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
-  refresh_token_expires_in Int?  // Kakao-specific field
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String?
+  access_token             String?
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String?
+  session_state            String?
+  refresh_token_expires_in Int?
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -69,80 +61,64 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-
-// 3. 설교 콘텐츠 모델: AI 분석 및 숏폼 데이터 저장
 model Sermon {
-  id            String      @id @default(cuid())
-  title         String      // 설교 제목
-  videoUrl      String      // 원본 영상 경로
-  churchName    String?     // 교회 이름 (워터마크용)
-  
-  // AI 분석 결과 (JSON 형태로 저장하여 유연성 확보)
-  analysisData  Json?       // Gemini가 추출한 타임스탬프, 캡션, 요약 등
-  
-  // 관계 설정
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
-  highlights    Highlight[] // 잘라낸 숏폼 영상들
-  
-  createdAt     DateTime    @default(now())
+  id           String      @id @default(cuid())
+  title        String
+  videoUrl     String
+  churchName   String?
+  analysisData Json?
+  userId       String
+  createdAt    DateTime    @default(now())
+  highlights   Highlight[]
+  user         User        @relation(fields: [userId], references: [id])
 }
 
-// 4. 하이라이트 모델: 편집된 숏폼 정보
 model Highlight {
-  id         String   @id @default(cuid())
-  sermonId   String
-  sermon     Sermon   @relation(fields: [sermonId], references: [id])
-  
-  title      String
-  startTime  Int
-  endTime    Int
-  caption    String   @db.Text
-  emotion    String?
-  platform   String?  // youtube, instagram, facebook
-  
-  clips      Clip[]
-  
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  sermonId  String
+  startTime Int
+  endTime   Int
+  caption   String
+  createdAt DateTime @default(now())
+  platform  String?
+  title     String
+  emotion   String?
+  updatedAt DateTime @updatedAt
+  clips     Clip[]
+  sermon    Sermon   @relation(fields: [sermonId], references: [id])
 }
 
 model Clip {
-  id            String   @id @default(cuid())
-  highlightId   String
-  highlight     Highlight @relation(fields: [highlightId], references: [id], onDelete: Cascade)
-  
-  platform      String   // youtube, instagram, facebook
-  videoUrl      String?  // Supabase Storage URL
-  thumbnailUrl  String?
-  
-  duration      Int      // seconds
-  fileSize      Int      @default(0) // bytes
-  resolution    String   // e.g., "1080x1920"
-  
-  status        String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id           String    @id @default(cuid())
+  highlightId  String
+  platform     String
+  language     String    @default("korean")
+  videoUrl     String?
+  thumbnailUrl String?
+  duration     Int
+  fileSize     Int       @default(0)
+  resolution   String
+  status       String    @default("PENDING")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  dubbedUrl    String?
+  highlight    Highlight @relation(fields: [highlightId], references: [id], onDelete: Cascade)
+
   @@index([highlightId])
   @@index([status])
+  @@index([language])
 }
 
-// 5. 결제 모델: 수익화 확인용
 model Payment {
-  id            String   @id @default(cuid())
-  amount        Int
-  status        String   // COMPLETED, CANCELLED
-  paymentKey    String   @unique // PG사 결제 키
-  
-  userId        String
-  user          User     @relation(fields: [userId], references: [id])
-  
-  createdAt     DateTime @default(now())
+  id         String   @id @default(cuid())
+  amount     Int
+  status     String
+  paymentKey String   @unique
+  userId     String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
 }
 
-// 열거형(Enum) 정의
 enum Role {
   USER
   ADMIN

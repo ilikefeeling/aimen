@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { resolveApiUrl } from '@/lib/api/config';
 import {
     Users,
     Search,
@@ -59,7 +60,7 @@ export default function AdminUsersPage() {
             if (planFilter) params.set('plan', planFilter);
             if (search) params.set('search', search);
 
-            const res = await fetch(`/api/admin/users?${params}`);
+            const res = await fetch(resolveApiUrl(`/api/admin/users?${params}`));
             if (!res.ok) throw new Error('Failed to fetch users');
             const data = await res.json();
             setUsers(data.users);

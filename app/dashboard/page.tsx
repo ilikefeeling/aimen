@@ -58,7 +58,7 @@ export default function DashboardPage() {
                     </p>
                     <div className="flex flex-wrap gap-5">
                         <Link href="/dashboard/upload">
-                            <button className="bg-gradient-gold text-navy px-10 py-4 rounded-2xl font-black text-lg hover:scale-105 transition-all shadow-gold flex items-center gap-3">
+                            <button className="bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] px-10 py-4 rounded-2xl font-black text-lg hover:scale-105 transition-all shadow-gold flex items-center gap-3">
                                 <Upload className="w-6 h-6 stroke-[3]" /> 새 영상 업로드
                             </button>
                         </Link>
@@ -120,7 +120,7 @@ export default function DashboardPage() {
                     <div className="glass-card-heavy p-10 rounded-[2rem] text-center relative overflow-hidden group border-divine bg-navy-light/60">
                         <div className="absolute inset-0 bg-gold/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <h3 className="text-lg font-bold text-gray-500 mb-6 uppercase tracking-[0.3em]">Current Plan</h3>
-                        <div className="inline-block px-10 py-3 bg-gradient-gold text-navy font-black rounded-2xl mb-8 shadow-gold text-xl font-cinzel">
+                        <div className="inline-block px-10 py-3 bg-[#FEE500] text-[#3C1E1E] font-black rounded-2xl mb-8 shadow-gold text-xl font-cinzel">
                             {session?.user?.plan?.toUpperCase() || 'FREE'}
                         </div>
                         <p className="text-base text-gray-400 mb-10 leading-relaxed">
@@ -129,9 +129,11 @@ export default function DashboardPage() {
                                 : '무료 플랜은 월 최대 3개의 영상 분석이 가능합니다.'}
                         </p>
                         {session?.user?.plan !== 'PRO' && (
-                            <button className="w-full glass-panel hover:bg-gold hover:text-navy text-gold py-4 rounded-2xl font-black border border-gold/30 transition-all flex items-center justify-center gap-3 text-lg">
-                                Pro 업그레이드 <ArrowRight className="w-5 h-5" />
-                            </button>
+                            <Link href="/dashboard/upgrade" className="w-full">
+                                <button className="w-full bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] py-4 rounded-2xl font-black border-none transition-all flex items-center justify-center gap-3 text-lg shadow-gold">
+                                    Pro 업그레이드 <ArrowRight className="w-5 h-5" />
+                                </button>
+                            </Link>
                         )}
                     </div>
 

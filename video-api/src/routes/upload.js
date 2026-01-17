@@ -35,10 +35,27 @@ const videoQueue = new Queue('video-processing', {
 // Upload endpoint - AUTH DISABLED FOR TESTING
 router.post('/', upload.single('video'), async (req, res) => {
     try {
-        const { userId, title } = req.body;
+        const { userId, title, targetLanguage, targetLanguages: targetLanguagesRaw } = req.body;
         const videoFile = req.file;
 
-        console.log('Upload request:', { userId, title, fileSize: videoFile?.size });
+        // Parse targetLanguages if provided, always include 'korean' as base
+        let languages = ['korean'];
+        if (targetLanguagesRaw) {
+            try {
+                const parsed = JSON.parse(targetLanguagesRaw);
+                if (Array.isArray(parsed)) {
+                    languages = [...new Set(['korean', ...parsed])];
+                } else {
+                    languages = [...new Set(['korean', parsed])];
+                }
+            } catch (e) {
+                languages = [...new Set(['korean', targetLanguagesRaw])];
+            }
+        } else if (targetLanguage) {
+            languages = [...new Set(['korean', targetLanguage])];
+        }
+
+        console.log('Upload request:', { userId, title, languages, fileSize: videoFile?.size });
 
         if (!videoFile) {
             return res.status(400).json({ error: 'No video file provided' });
@@ -91,6 +108,7 @@ router.post('/', upload.single('video'), async (req, res) => {
                 videoUrl: url,
                 userId,
                 title,
+                targetLanguages: languages || ['korean'],
             }, {
                 attempts: 3,
                 backoff: {

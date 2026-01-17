@@ -1,0 +1,9 @@
+{
+    "appId": "com.aimen.app",
+    "appName": "에이아이멘",
+    "webDir": "out",
+    "bundledWebRuntime": false,
+    "server": {
+        "androidScheme": "https"
+    }
+}

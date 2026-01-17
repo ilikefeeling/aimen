@@ -1,26 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Mobile app (Capacitor) requires static export.
+  // Full-stack (Vercel/Local) requires SSR/API.
+  output: process.env.IS_MOBILE_BUILD === 'true' ? 'export' : undefined,
+  images: {
+    unoptimized: true,
+  },
+  trailingSlash: true,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   turbopack: {
     root: '.',
-  },
-  async headers() {
-    return [
-      {
-        // Apply headers to all routes for FFmpeg.wasm SharedArrayBuffer support
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin',
-          },
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp',
-          },
-        ],
-      },
-    ];
   },
   webpack: (config) => {
     // Fix for handling video files

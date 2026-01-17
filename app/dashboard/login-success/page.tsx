@@ -69,7 +69,7 @@ export default function LoginSuccessPage() {
                 <Button
                     onClick={() => router.push('/dashboard')}
                     size="lg"
-                    className="w-full h-16 text-xl font-black tracking-widest shadow-gold/20 shadow-2xl hover:scale-[1.02]"
+                    className="w-full h-16 text-xl font-black tracking-widest bg-[#FEE500] hover:bg-[#FEE500]/90 text-[#3C1E1E] shadow-gold/20 shadow-2xl hover:scale-[1.02] border-none"
                 >
                     대시보드로 시작하기 <ArrowRight className="ml-3 w-6 h-6" />
                 </Button>

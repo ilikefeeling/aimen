@@ -1,4 +1,4 @@
-const VIDEO_API_URL = process.env.NEXT_PUBLIC_VIDEO_API_URL || 'http://localhost:3001';
+import { resolveVideoApiUrl } from './config';
 
 export interface UploadResponse {
     success: boolean;
@@ -24,6 +24,8 @@ export async function uploadVideo(
     file: File,
     title: string,
     userId: string,
+    languages: string[] = ['korean'],
+    tone: string = 'professional',
     token?: string
 ): Promise<UploadResponse> {
     const formData = new FormData();
@@ -31,14 +33,18 @@ export async function uploadVideo(
     formData.append('title', title);
     formData.append('userId', userId);
 
+    // Send as JSON string for easier handling of arrays in FormData
+    formData.append('targetLanguages', JSON.stringify(languages));
+    formData.append('dubbingTone', tone);
+
     const headers: HeadersInit = {};
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    console.log('Uploading to:', `${VIDEO_API_URL}/api/upload`);
+    console.log('Uploading to:', resolveVideoApiUrl('/api/upload'));
 
-    const response = await fetch(`${VIDEO_API_URL}/api/upload`, {
+    const response = await fetch(resolveVideoApiUrl('/api/upload'), {
         method: 'POST',
         headers,
         body: formData,
@@ -56,7 +62,7 @@ export async function uploadVideo(
  * Get job status
  */
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
-    const response = await fetch(`${VIDEO_API_URL}/api/jobs/${jobId}`);
+    const response = await fetch(resolveVideoApiUrl(`/api/jobs/${jobId}`));
 
     if (!response.ok) {
         throw new Error('Failed to get job status');

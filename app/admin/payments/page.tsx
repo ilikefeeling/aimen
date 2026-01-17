@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resolveApiUrl } from '@/lib/api/config';
 import { toast } from 'sonner';
 import {
     CreditCard,
@@ -53,7 +54,7 @@ export default function AdminPaymentsPage() {
     const fetchPayments = async () => {
         try {
             setLoading(true);
-            const res = await fetch(`/api/admin/payments?page=${page}`);
+            const res = await fetch(resolveApiUrl(`/api/admin/payments?page=${page}`));
             if (!res.ok) throw new Error('Failed to fetch payments');
             const data = await res.json();
             setPayments(data.payments);
@@ -101,7 +102,7 @@ export default function AdminPaymentsPage() {
         if (!confirm('정말 PRO 권한을 해제하시겠습니까?')) return;
 
         try {
-            const res = await fetch('/api/admin/payments', {
+            const res = await fetch(resolveApiUrl('/api/admin/payments'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId, action: 'REVOKE_PRO' })

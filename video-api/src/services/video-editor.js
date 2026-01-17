@@ -2,6 +2,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 const path = require('path');
 const fs = require('fs/promises');
+const os = require('os');
 const { createClient } = require('@supabase/supabase-js');
 
 // Set ffmpeg path
@@ -257,7 +258,7 @@ async function processHighlightClip(options) {
         sermonId
     } = options;
 
-    const tempDir = path.join(__dirname, '../../temp');
+    const tempDir = path.join(os.tmpdir(), 'aimen-video-temp');
     await fs.mkdir(tempDir, { recursive: true });
 
     const timestamp = Date.now();
@@ -321,10 +322,35 @@ async function processHighlightClip(options) {
     }
 }
 
+/**
+ * Extract audio from video for voice cloning
+ * @param {string} inputPath - Path to video
+ * @param {string} outputPath - Path to save audio (mp3)
+ * @param {number} startTime - Start time
+ * @param {number} duration - Duration in seconds
+ */
+async function extractAudio(inputPath, outputPath, startTime, duration = 60) {
+    return new Promise((resolve, reject) => {
+        console.log(`🎙️ Extracting audio sample: ${startTime}s for ${duration}s`);
+        ffmpeg(inputPath)
+            .setFfmpegPath(ffmpegPath)
+            .inputOptions([`-ss ${startTime}`])
+            .duration(duration)
+            .noVideo()
+            .audioCodec('libmp3lame')
+            .audioBitrate(128)
+            .output(outputPath)
+            .on('end', () => resolve(outputPath))
+            .on('error', (err) => reject(err))
+            .run();
+    });
+}
+
 module.exports = {
     extractClip,
     generateThumbnail,
     uploadToStorage,
     processHighlightClip,
+    extractAudio,
     PLATFORM_SPECS
 };

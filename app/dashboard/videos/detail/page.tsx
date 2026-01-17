@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { resolveApiUrl } from '@/lib/api/config';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +25,9 @@ import {
 interface Clip {
     id: string;
     platform: string;
+    language: string;
     videoUrl: string | null;
+    dubbedUrl: string | null;
     thumbnailUrl: string | null;
     status: string;
 }
@@ -46,13 +49,139 @@ interface Sermon {
     videoUrl: string;
     churchName: string | null;
     analysisData: any;
+    status?: string;
     createdAt: string;
 }
 
-export default function VideoDetailPage() {
-    const params = useParams();
+function HighlightCard({ highlight, index, formatTime }: { highlight: Highlight; index: number; formatTime: (s: number | string) => string }) {
+    const clips = highlight.clips || [];
+    const languages = [...new Set(clips.map(c => c.language))];
+    const [selectedLang, setSelectedLang] = useState(languages.length > 0 ? (languages.includes('korean') ? 'korean' : languages[0]) : 'korean');
+    const [isDubbed, setIsDubbed] = useState(false);
+
+    const activeClip = clips.find(c => c.language === selectedLang);
+    const hasDubbing = !!activeClip?.dubbedUrl;
+    const videoUrl = isDubbed && activeClip?.dubbedUrl ? activeClip.dubbedUrl : (activeClip?.videoUrl || '');
+
+    const langFlags: { [key: string]: string } = {
+        korean: '🇰🇷',
+        english: '🇺🇸',
+        japanese: '🇯🇵',
+        chinese: '🇨🇳',
+        vietnamese: '🇻🇳'
+    };
+
+    return (
+        <Card className="p-5 bg-navy-light/60 border-gold/10 hover:border-gold/40 hover:bg-navy-light transition-all group overflow-hidden">
+            <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <span className="w-8 h-8 flex items-center justify-center bg-gold text-navy font-black rounded-lg text-sm">
+                            {index + 1}
+                        </span>
+                        <div className="flex items-center gap-2 text-gray-400 text-sm font-bold">
+                            <Clock className="w-3.5 h-3.5" />
+                            {formatTime(highlight.startTime)} - {formatTime(highlight.endTime)}
+                        </div>
+                    </div>
+                    <div className="flex gap-1">
+                        <button className="p-2 hover:bg-gold/10 text-gray-400 hover:text-gold rounded-lg transition-colors" title="다운로드"
+                            onClick={() => window.open(videoUrl, '_blank')}>
+                            <Download className="w-4 h-4" />
+                        </button>
+                        <button className="p-2 hover:bg-gold/10 text-gray-400 hover:text-gold rounded-lg transition-colors" title="공유">
+                            <Share2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+
+                <h3 className="text-white font-bold leading-tight line-clamp-2 min-h-[3rem]">
+                    {highlight.title}
+                </h3>
+
+                <div className="relative aspect-video bg-black/40 rounded-xl overflow-hidden border border-white/5 group-hover:border-gold/20 transition-colors">
+                    {activeClip?.thumbnailUrl ? (
+                        <img
+                            src={activeClip.thumbnailUrl}
+                            alt={highlight.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                            <Video className="w-10 h-10 text-white/10" />
+                        </div>
+                    )}
+                    <button
+                        onClick={() => window.open(videoUrl, '_blank')}
+                        className="absolute inset-0 m-auto w-14 h-14 bg-gold text-navy rounded-full flex items-center justify-center shadow-2xl opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all"
+                    >
+                        <Play className="w-6 h-6 fill-current" />
+                    </button>
+
+                    {/* Status Badge */}
+                    {activeClip?.status === 'COMPLETED' ? (
+                        <div className="absolute top-3 right-3 bg-green-500/90 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                            Ready
+                        </div>
+                    ) : (
+                        <div className="absolute top-3 right-3 bg-gold/90 text-navy text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                            Processing
+                        </div>
+                    )}
+
+                    {/* Language Badge */}
+                    <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg text-xs flex items-center gap-1 border border-white/10">
+                        <span>{langFlags[selectedLang] || '🌐'}</span>
+                        <span className="uppercase text-[10px] font-black">{selectedLang}</span>
+                    </div>
+                </div>
+
+                {/* Multi-language Tabs */}
+                {languages.length > 1 && (
+                    <div className="flex flex-wrap gap-1.5 p-1 bg-navy/40 rounded-xl border border-white/5 mt-1">
+                        {languages.map(lang => (
+                            <button
+                                key={lang}
+                                onClick={() => {
+                                    setSelectedLang(lang);
+                                    if (lang === 'korean') setIsDubbed(false);
+                                }}
+                                className={`
+                                    flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black transition-all
+                                    ${selectedLang === lang
+                                        ? 'bg-gold text-navy shadow-lg'
+                                        : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    }
+                                `}
+                            >
+                                <span>{langFlags[lang] || '🌐'}</span>
+                                <span className="uppercase">{lang.slice(0, 3)}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Dubbing Toggle (Only for foreign languages if dubbing exists) */}
+                {selectedLang !== 'korean' && hasDubbing && (
+                    <div className="flex items-center justify-between p-2 bg-gold/5 rounded-xl border border-gold/10">
+                        <span className="text-[10px] font-bold text-gold/80 uppercase tracking-wider ml-1">AI Dubbing Mode</span>
+                        <button
+                            onClick={() => setIsDubbed(!isDubbed)}
+                            className={`w-10 h-5 rounded-full relative transition-colors ${isDubbed ? 'bg-gold' : 'bg-navy-lighter'}`}
+                        >
+                            <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isDubbed ? 'left-6' : 'left-1'}`} />
+                        </button>
+                    </div>
+                )}
+            </div>
+        </Card>
+    );
+}
+
+function VideoDetailContent() {
+    const searchParams = useSearchParams();
     const router = useRouter();
-    const videoId = params.id as string;
+    const videoId = searchParams.get('id');
 
     const [sermon, setSermon] = useState<Sermon | null>(null);
     const [highlights, setHighlights] = useState<Highlight[]>([]);
@@ -68,7 +197,7 @@ export default function VideoDetailPage() {
     const fetchVideoDetails = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`/api/sermons/${videoId}`);
+            const response = await fetch(resolveApiUrl(`/api/sermons/${videoId}`));
             const data = await response.json();
 
             if (!response.ok) {
@@ -102,7 +231,7 @@ export default function VideoDetailPage() {
         );
     }
 
-    if (error || !sermon) {
+    if (error || !sermon || !videoId) {
         return (
             <div className="max-w-2xl mx-auto mt-20 p-4">
                 <Card className="text-center p-12 bg-navy-light/40 border-red-500/20">
@@ -195,7 +324,6 @@ export default function VideoDetailPage() {
                                     <Play className="w-10 h-10 fill-current ml-1" />
                                 </a>
                             </div>
-                            {/* Placeholder/Thumb (since we don't have images) */}
                             <div className="w-full h-full bg-navy-lighter/30 flex items-center justify-center">
                                 <Video className="w-32 h-32 text-gold/10" />
                             </div>
@@ -232,7 +360,6 @@ export default function VideoDetailPage() {
                         </Card>
                     )}
 
-                    {/* Analyzing/Failed States for Summary */}
                     {status === 'ANALYZING' && (
                         <Card className="p-12 text-center bg-navy-light/20 border-dashed border-gold/20">
                             <Loader2 className="w-12 h-12 text-gold animate-spin mx-auto mb-6 opacity-50" />
@@ -260,90 +387,14 @@ export default function VideoDetailPage() {
                                     <p className="text-gray-500">추출된 하이라이트가 없습니다.</p>
                                 </Card>
                             ) : (
-                                highlights.map((highlight, index) => {
-                                    const clip = highlight.clips?.[0];
-                                    const clipUrl = clip?.videoUrl || highlight.videoUrl;
-                                    const hasClip = clip?.status === 'COMPLETED';
-
-                                    return (
-                                        <Card
-                                            key={highlight.id}
-                                            className="p-5 bg-navy-light/60 border-gold/10 hover:border-gold/40 hover:bg-navy-light transition-all group"
-                                        >
-                                            <div className="flex flex-col gap-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="w-8 h-8 flex items-center justify-center bg-gold text-navy font-black rounded-lg text-sm">
-                                                            {index + 1}
-                                                        </span>
-                                                        <div className="flex items-center gap-2 text-gray-400 text-sm font-bold">
-                                                            <Clock className="w-3.5 h-3.5" />
-                                                            {formatTime(highlight.startTime)} - {formatTime(highlight.endTime)}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-1">
-                                                        <button className="p-2 hover:bg-gold/10 text-gray-400 hover:text-gold rounded-lg transition-colors" title="다운로드">
-                                                            <Download className="w-4 h-4" />
-                                                        </button>
-                                                        <button className="p-2 hover:bg-gold/10 text-gray-400 hover:text-gold rounded-lg transition-colors" title="공유">
-                                                            <Share2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Clip Thumbnail/Preview Area */}
-                                                <div className="relative aspect-video bg-black/40 rounded-xl overflow-hidden border border-white/5 group-hover:border-gold/20 transition-colors">
-                                                    {clip?.thumbnailUrl ? (
-                                                        <img
-                                                            src={clip.thumbnailUrl}
-                                                            alt={highlight.title}
-                                                            crossOrigin="anonymous"
-                                                            className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center">
-                                                            <Video className="w-10 h-10 text-gold/10" />
-                                                        </div>
-                                                    )}
-
-                                                    {!hasClip && clip?.status === 'PROCESSING' && (
-                                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-navy/60 backdrop-blur-sm">
-                                                            <Loader2 className="w-6 h-6 text-gold animate-spin mb-2" />
-                                                            <span className="text-[10px] text-gold/80 font-bold">추출 중...</span>
-                                                        </div>
-                                                    )}
-
-                                                    {hasClip && (
-                                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <div className="w-12 h-12 bg-gold text-navy rounded-full flex items-center justify-center shadow-glow transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                                                                <Play className="w-6 h-6 fill-current ml-1" />
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {highlight.caption && (
-                                                    <p className="text-gray-300 text-sm leading-relaxed line-clamp-2 italic font-medium">
-                                                        "{highlight.caption}"
-                                                    </p>
-                                                )}
-
-                                                <a
-                                                    href={clipUrl || '#'}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className={`mt-2 ${!clipUrl ? 'pointer-events-none opacity-50' : ''}`}
-                                                    title="클립 보기"
-                                                >
-                                                    <Button className="w-full text-xs py-2 bg-navy-lighter hover:bg-gold hover:text-navy border border-gold/20 shadow-none">
-                                                        <Play className="w-3 h-3 mr-2" />
-                                                        {hasClip ? '클립 보기' : clip?.status === 'PROCESSING' ? '추출 진행 중' : '원본 영상 확인'}
-                                                    </Button>
-                                                </a>
-                                            </div>
-                                        </Card>
-                                    );
-                                })
+                                highlights.map((highlight, index) => (
+                                    <HighlightCard
+                                        key={highlight.id}
+                                        highlight={highlight}
+                                        index={index}
+                                        formatTime={formatTime}
+                                    />
+                                ))
                             )}
                         </div>
                     ) : (
@@ -367,7 +418,6 @@ export default function VideoDetailPage() {
                 </div>
             </div>
 
-            {/* Bottom Navigation */}
             <div className="pt-12 pb-8 border-t border-gold/10 flex flex-col md:flex-row items-center justify-center gap-4">
                 <Link href="/dashboard/videos">
                     <Button variant="outline" className="w-full md:w-auto px-10 py-6 border-gold/30 text-gold hover:bg-gold/10">
@@ -380,6 +430,19 @@ export default function VideoDetailPage() {
                     </Button>
                 </Link>
             </div>
-        </div>
+        </div >
+    );
+}
+
+export default function VideoDetailPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-[60vh] flex flex-col items-center justify-center">
+                <Loader2 className="w-12 h-12 text-gold animate-spin mb-4" />
+                <p className="text-gray-400 font-medium">로딩 중...</p>
+            </div>
+        }>
+            <VideoDetailContent />
+        </Suspense>
     );
 }

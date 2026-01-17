@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { resolveVideoApiUrl } from '@/lib/api/config';
 
 interface ClipGeneratorProps {
     highlightId: string;
@@ -28,7 +29,7 @@ export default function ClipGenerator({ highlightId, onClipGenerated }: ClipGene
 
             console.log('🎬 Generating clip:', { highlightId, selectedPlatform });
 
-            const response = await fetch('http://localhost:3001/api/clips/generate', {
+            const response = await fetch(resolveVideoApiUrl('/api/clips/generate'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -66,7 +67,7 @@ export default function ClipGenerator({ highlightId, onClipGenerated }: ClipGene
             try {
                 attempts++;
 
-                const response = await fetch(`http://localhost:3001/api/clips/${clipId}`);
+                const response = await fetch(resolveVideoApiUrl(`/api/clips/${clipId}`));
                 const data = await response.json();
 
                 console.log(`📊 Polling attempt ${attempts}:`, data.clip.status);
